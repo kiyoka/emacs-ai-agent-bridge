@@ -119,12 +119,15 @@ This is an alias for `emacs-ai-agent-bridge-send-region-to-tmux'."
 
 (defun emacs-ai-agent-bridge-update-ai-buffer (content)
   "Update the *ai* buffer with CONTENT and display it without switching focus."
-  (let ((buffer (get-buffer-create emacs-ai-agent-bridge--ai-buffer-name)))
+  (let* ((buffer (get-buffer-create emacs-ai-agent-bridge--ai-buffer-name))
+         (window (get-buffer-window buffer)))
     (with-current-buffer buffer
       (erase-buffer)
       (insert content)
       (goto-char (point-min)))
-    (display-buffer buffer '(display-buffer-pop-up-window))))
+    ;; Only display buffer if it's not already visible
+    (unless window
+      (display-buffer buffer '(display-buffer-pop-up-window)))))
 
 (defun emacs-ai-agent-bridge-monitor-tmux ()
   "Check tmux console and update buffer if content is unchanged."
