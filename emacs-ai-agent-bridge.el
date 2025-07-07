@@ -56,21 +56,18 @@ If nil, will use the first available session."
   :type 'integer
   :group 'emacs-ai-agent-bridge)
 
-(defcustom emacs-ai-agent-bridge-prompt-patterns
-  '("claude-code>"
-    "claude>"
-    ">>>"
-    "> "
-    "$ ")
-  "List of patterns that indicate Claude Code is waiting for input."
-  :type '(repeat string)
-  :group 'emacs-ai-agent-bridge)
 
 (defvar emacs-ai-agent-bridge--monitor-timer nil
   "Timer object for periodic monitoring.")
 
 (defvar emacs-ai-agent-bridge--ai-buffer-name "*ai*"
   "Name of the buffer to display AI agent output.")
+
+(defvar emacs-ai-agent-bridge--last-capture nil
+  "Previous tmux capture content for comparison.")
+
+(defvar emacs-ai-agent-bridge--prompt-detected nil
+  "Flag to track if prompt has already been detected and buffer shown.")
 
 (defun emacs-ai-agent-bridge-get-first-tmux-session ()
   "Get the name of the first available tmux session."
@@ -86,10 +83,14 @@ If nil, will use the first available session."
         (text (buffer-substring-no-properties start end)))
     (if session
         (progn
+          ;; Send text first, then send Enter key separately
           (shell-command
-           (format "tmux send-keys -t %s %s Enter"
+           (format "tmux send-keys -t %s %s"
                    (shell-quote-argument session)
                    (shell-quote-argument text)))
+          (shell-command
+           (format "tmux send-keys -t %s C-m"
+                   (shell-quote-argument session)))
           (message "Sent region to tmux session: %s" session))
       (message "No tmux sessions found"))))
 
@@ -110,40 +111,35 @@ This is an alias for `emacs-ai-agent-bridge-send-region-to-tmux'."
         (shell-command-to-string cmd)
       (error "No tmux session available"))))
 
-(defun emacs-ai-agent-bridge-at-prompt-p (content)
-  "Check if CONTENT indicates Claude Code is at an input prompt."
-  (when content
-    (let ((lines (split-string content "\n" t)))
-      (when lines
-        ;; Check for boxed prompt pattern (Claude's edit completion)
-        (let ((last-few-lines (last lines 3)))
-          (when (and (>= (length last-few-lines) 3)
-                     ;; Check if we have the box pattern
-                     (string-match-p "^╭─+╮$" (nth 0 last-few-lines))
-                     (string-match-p "^│ *> *│$" (nth 1 last-few-lines))
-                     (string-match-p "^╰─+╯$" (nth 2 last-few-lines)))
-            (cl-return-from emacs-ai-agent-bridge-at-prompt-p t)))
-        ;; Check for simple prompt patterns
-        (let ((last-line (car (last lines))))
-          (cl-some (lambda (pattern)
-                     (string-suffix-p pattern last-line))
-                   emacs-ai-agent-bridge-prompt-patterns))))))
+(defun emacs-ai-agent-bridge-content-unchanged-p (content)
+  "Check if CONTENT is unchanged from the last capture."
+  (and emacs-ai-agent-bridge--last-capture
+       content
+       (string= emacs-ai-agent-bridge--last-capture content)))
 
 (defun emacs-ai-agent-bridge-update-ai-buffer (content)
-  "Update the *ai* buffer with CONTENT and switch to it."
+  "Update the *ai* buffer with CONTENT and display it without switching focus."
   (let ((buffer (get-buffer-create emacs-ai-agent-bridge--ai-buffer-name)))
     (with-current-buffer buffer
       (erase-buffer)
       (insert content)
       (goto-char (point-min)))
-    (pop-to-buffer buffer)))
+    (display-buffer buffer '(display-buffer-pop-up-window))))
 
 (defun emacs-ai-agent-bridge-monitor-tmux ()
-  "Check tmux console and update buffer if at prompt."
+  "Check tmux console and update buffer if content is unchanged."
   (condition-case err
       (let ((content (emacs-ai-agent-bridge-capture-tmux-pane)))
-        (when (emacs-ai-agent-bridge-at-prompt-p content)
-          (emacs-ai-agent-bridge-update-ai-buffer content)))
+        (cond
+         ;; Content unchanged and not yet detected - show buffer
+         ((and (emacs-ai-agent-bridge-content-unchanged-p content)
+               (not emacs-ai-agent-bridge--prompt-detected))
+          (emacs-ai-agent-bridge-update-ai-buffer content)
+          (setq emacs-ai-agent-bridge--prompt-detected t))
+         ;; Content changed - reset detection flag
+         ((not (emacs-ai-agent-bridge-content-unchanged-p content))
+          (setq emacs-ai-agent-bridge--prompt-detected nil)))
+        (setq emacs-ai-agent-bridge--last-capture content))
     (error
      (message "Error monitoring tmux: %s" (error-message-string err)))))
 
@@ -152,6 +148,8 @@ This is an alias for `emacs-ai-agent-bridge-send-region-to-tmux'."
   (interactive)
   (when emacs-ai-agent-bridge--monitor-timer
     (cancel-timer emacs-ai-agent-bridge--monitor-timer))
+  (setq emacs-ai-agent-bridge--last-capture nil)  ; Reset last capture
+  (setq emacs-ai-agent-bridge--prompt-detected nil)  ; Reset detection flag
   (setq emacs-ai-agent-bridge--monitor-timer
         (run-with-timer 0 emacs-ai-agent-bridge-monitor-interval 
                         #'emacs-ai-agent-bridge-monitor-tmux))
