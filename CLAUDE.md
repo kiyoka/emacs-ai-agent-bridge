@@ -27,9 +27,10 @@ When implementing this bridge, consider:
 - Main implementation is in `emacs-ai-agent-bridge.el`
 - Core features implemented:
   - Automatic tmux session monitoring (5-second intervals)
-  - Claude Code prompt detection (including boxed prompts)
-  - Automatic buffer creation and focus when prompt is detected
-  - Region sending functionality with automatic Enter key
+  - Prompt detection based on unchanged content (no pattern matching)
+  - Automatic buffer display when prompt is detected (focus remains on current buffer)
+  - Buffer shown only once per prompt detection
+  - Region sending functionality with automatic C-m (Enter key)
 
 ## Implemented Features
 
@@ -40,10 +41,15 @@ When implementing this bridge, consider:
 
 ### 2. Prompt Detection
 The system detects when the AI agent is waiting for input by monitoring if the tmux console content remains unchanged between checks. When the content doesn't change for 5 seconds, it's assumed the agent is at a prompt waiting for input.
+- Detection is based solely on content changes, not pattern matching
+- *ai* buffer is displayed only once when prompt is first detected
+- Buffer is reused if already visible, only content is updated
+- Focus remains on the current working buffer
 
 ### 3. Text Sending
-- **Function**: `send-to-ai` - Sends selected region to tmux with automatic Enter key
+- **Function**: `send-to-ai` - Sends selected region to tmux with automatic C-m (Enter key)
 - **Function**: `emacs-ai-agent-bridge-send-region-to-tmux` - Core implementation
+- Text is sent to tmux followed by C-m to execute the command
 
 ### 4. Configuration Variables
 - `emacs-ai-agent-bridge-tmux-session` - tmux session to monitor (nil for auto-detect)
