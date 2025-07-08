@@ -18,9 +18,37 @@ An Emacs extension that bridges an AI coding agent running in tmux with Emacs.
    (require 'emacs-ai-agent-bridge)
    ```
 
+### Quick Start Configuration
+
+To automatically start monitoring when Emacs starts:
+```elisp
+(require 'emacs-ai-agent-bridge)
+(emacs-ai-agent-bridge-start-monitoring)
+```
+
+### Full Configuration Example
+
+```elisp
+;; Load the package
+(require 'emacs-ai-agent-bridge)
+
+;; Optional: Configure settings
+(setq emacs-ai-agent-bridge-tmux-session nil)  ; auto-detect session
+(setq emacs-ai-agent-bridge-tmux-pane "0")     ; monitor pane 0
+(setq emacs-ai-agent-bridge-monitor-interval 5) ; check every 5 seconds
+
+;; Start monitoring automatically
+(emacs-ai-agent-bridge-start-monitoring)
+
+;; Optional: Set up key binding for sending text
+(global-set-key (kbd "C-c a s") 'send-to-ai)
+```
+
 ## Usage
 
 ### Start Monitoring
+
+#### Manual Start
 ```
 M-x emacs-ai-agent-bridge-start-monitoring
 ```
