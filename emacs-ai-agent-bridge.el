@@ -164,10 +164,15 @@ Moves cursor to top with 3 Up keys, then moves down as needed, then presses Ente
     (with-current-buffer buffer
       (erase-buffer)
       (insert content)
-      (goto-char (point-min)))
+      (goto-char (point-max)))
     ;; Only display buffer if it's not already visible
     (unless window
-      (display-buffer buffer '(display-buffer-pop-up-window)))))
+      (display-buffer buffer '(display-buffer-pop-up-window)))
+    ;; If window exists, scroll to bottom
+    (when window
+      (with-selected-window window
+        (goto-char (point-max))
+        (recenter -1)))))
 
 (defun emacs-ai-agent-bridge-monitor-tmux ()
   "Check tmux console and update buffer if content is unchanged."
