@@ -100,6 +100,46 @@ This is an alias for `emacs-ai-agent-bridge-send-region-to-tmux'."
   (interactive "r")
   (emacs-ai-agent-bridge-send-region-to-tmux start end))
 
+(defun emacs-ai-agent-bridge-select-option (option-number)
+  "Select an option from AI agent's choice prompt.
+OPTION-NUMBER should be 1, 2, or 3.
+Moves cursor to top with 3 Up keys, then moves down as needed, then presses Enter."
+  (let ((session (emacs-ai-agent-bridge-get-first-tmux-session)))
+    (if session
+        (progn
+          ;; Send 3 Up arrow keys to move to the top
+          (dotimes (_ 3)
+            (shell-command
+             (format "tmux send-keys -t %s Up"
+                     (shell-quote-argument session))))
+          ;; Send Down arrow keys based on option number
+          (when (> option-number 1)
+            (dotimes (_ (1- option-number))
+              (shell-command
+               (format "tmux send-keys -t %s Down"
+                       (shell-quote-argument session)))))
+          ;; Send Enter key (C-m)
+          (shell-command
+           (format "tmux send-keys -t %s C-m"
+                   (shell-quote-argument session)))
+          (message "Selected option %d" option-number))
+      (message "No tmux sessions found"))))
+
+(defun select-ai-option-1 ()
+  "Select option 1 from AI agent's choice prompt."
+  (interactive)
+  (emacs-ai-agent-bridge-select-option 1))
+
+(defun select-ai-option-2 ()
+  "Select option 2 from AI agent's choice prompt."
+  (interactive)
+  (emacs-ai-agent-bridge-select-option 2))
+
+(defun select-ai-option-3 ()
+  "Select option 3 from AI agent's choice prompt."
+  (interactive)
+  (emacs-ai-agent-bridge-select-option 3))
+
 (defun emacs-ai-agent-bridge-capture-tmux-pane ()
   "Capture the current content of the configured tmux pane."
   (let* ((session (or emacs-ai-agent-bridge-tmux-session
