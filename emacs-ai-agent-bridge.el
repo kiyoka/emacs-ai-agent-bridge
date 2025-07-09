@@ -171,33 +171,17 @@ Moves cursor to top with 3 Up keys, then moves down as needed, then presses Ente
     (with-temp-buffer
       (insert content)
       (goto-char (point-min))
-      ;; First pass: Find the maximum box width in the content
-      (let ((box-width nil))
-        (save-excursion
-          (while (re-search-forward "^\\([╭╰┌└├]\\)\\(─+\\)\\([╮╯┐┘┤]\\)$" nil t)
-            (let ((current-width (+ 2 (length (match-string 2)))))
-              (when (or (null box-width) (> current-width box-width))
-                (setq box-width current-width)))))
-        ;; Second pass: Adjust all box lines to the same width
-        (when (and box-width (> box-width max-width))
-          (goto-char (point-min))
-          (let ((new-line-length (- max-width 2)))
-            ;; Adjust top, bottom, and middle box lines
-            (while (re-search-forward "^\\([╭╰┌└├]\\)\\(─+\\)\\([╮╯┐┘┤]\\)$" nil t)
-              (let* ((start-char (match-string 1))
-                     (end-char (match-string 3))
-                     (new-line (make-string new-line-length ?─)))
-                (replace-match (concat start-char new-line end-char))))
-            ;; Adjust vertical lines with content
-            (goto-char (point-min))
-            (while (re-search-forward "^│\\(.+\\)│$" nil t)
-              (let* ((content-str (match-string 1))
-                     (content-length (length content-str))
-                     (padding-needed (- new-line-length content-length))
-                     (new-content (if (> padding-needed 0)
-                                    (concat content-str (make-string padding-needed ?\s))
-                                  (substring content-str 0 new-line-length))))
-                (replace-match (concat "│" new-content "│")))))))
+      ;; Only adjust outermost box lines (lines that start at column 0)
+      (while (re-search-forward "^\\([╭╰┌└├]\\)\\(─+\\)\\([╮╯┐┘┤]\\)$" nil t)
+        (let* ((start-char (match-string 1))
+               (line-chars (match-string 2))
+               (end-char (match-string 3))
+               (line-length (length line-chars))
+               (total-length (+ 2 line-length))) ; 2 for start and end chars
+          (when (> total-length max-width)
+            (let* ((new-line-length (- max-width 2))
+                   (new-line (make-string new-line-length ?─)))
+              (replace-match (concat start-char new-line end-char))))))
       (buffer-string))))
 
 (defun emacs-ai-agent-bridge-update-ai-buffer (content)
@@ -221,12 +205,8 @@ Moves cursor to top with 3 Up keys, then moves down as needed, then presses Ente
       (setq buffer-read-only t)
       ;; Apply the keymap
       (use-local-map emacs-ai-agent-bridge-mode-map)
-      ;; Set buffer-file-name to allow editing emacs-ai-agent-bridge.el
-      (let ((dir (file-name-directory (or load-file-name
-                                          (buffer-file-name)
-                                          default-directory))))
-        (when dir
-          (setq buffer-file-name (expand-file-name "emacs-ai-agent-bridge.el" dir)))))
+      ;; Ensure buffer has no file association (like *scratch*)
+      (setq buffer-file-name nil))
     ;; Only display buffer if it's not already visible
     (unless window
       (display-buffer buffer '(display-buffer-pop-up-window)))
