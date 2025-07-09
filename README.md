@@ -64,6 +64,27 @@ M-x emacs-ai-agent-bridge-start-monitoring
    M-x emacs-ai-agent-bridge-send-region-to-tmux
    ```
 
+### Respond to AI Agent Prompts
+When the AI agent presents multiple choice options in the *ai* buffer, you can respond quickly using number keys:
+
+1. Focus on the *ai* buffer (e.g., by clicking on it)
+2. Press the number key corresponding to your choice:
+   - Press `1` to select the first option
+   - Press `2` to select the second option  
+   - Press `3` to select the third option
+
+Example prompt:
+```
+╭───────────────────────────────────────────────────────────────────────────────────────╮
+│ Do you want to proceed?                                                                │
+│ ❯ 1. Yes                                                                              │
+│   2. Yes, and don't ask again for find commands                                        │
+│   3. No, and tell Claude what to do differently (esc)                                 │
+╰───────────────────────────────────────────────────────────────────────────────────────╯
+```
+
+Simply press `1`, `2`, or `3` in the *ai* buffer to send your selection to the AI agent.
+
 ### Stop Monitoring
 ```
 M-x emacs-ai-agent-bridge-stop-monitoring
