@@ -165,14 +165,57 @@ Moves cursor to top with 3 Up keys, then moves down as needed, then presses Ente
        content
        (string= emacs-ai-agent-bridge--last-capture content)))
 
+(defun emacs-ai-agent-bridge-adjust-box-lines (content window-width)
+  "Adjust horizontal box drawing lines in CONTENT to fit within WINDOW-WIDTH."
+  (let ((max-width (- window-width 4))) ; Leave some margin
+    (with-temp-buffer
+      (insert content)
+      (goto-char (point-min))
+      ;; First pass: Find the maximum box width in the content
+      (let ((box-width nil))
+        (save-excursion
+          (while (re-search-forward "^\\([╭╰┌└├]\\)\\(─+\\)\\([╮╯┐┘┤]\\)$" nil t)
+            (let ((current-width (+ 2 (length (match-string 2)))))
+              (when (or (null box-width) (> current-width box-width))
+                (setq box-width current-width)))))
+        ;; Second pass: Adjust all box lines to the same width
+        (when (and box-width (> box-width max-width))
+          (goto-char (point-min))
+          (let ((new-line-length (- max-width 2)))
+            ;; Adjust top, bottom, and middle box lines
+            (while (re-search-forward "^\\([╭╰┌└├]\\)\\(─+\\)\\([╮╯┐┘┤]\\)$" nil t)
+              (let* ((start-char (match-string 1))
+                     (end-char (match-string 3))
+                     (new-line (make-string new-line-length ?─)))
+                (replace-match (concat start-char new-line end-char))))
+            ;; Adjust vertical lines with content
+            (goto-char (point-min))
+            (while (re-search-forward "^│\\(.+\\)│$" nil t)
+              (let* ((content-str (match-string 1))
+                     (content-length (length content-str))
+                     (padding-needed (- new-line-length content-length))
+                     (new-content (if (> padding-needed 0)
+                                    (concat content-str (make-string padding-needed ?\s))
+                                  (substring content-str 0 new-line-length))))
+                (replace-match (concat "│" new-content "│")))))))
+      (buffer-string))))
+
 (defun emacs-ai-agent-bridge-update-ai-buffer (content)
   "Update the *ai* buffer with CONTENT and display it without switching focus."
   (let* ((buffer (get-buffer-create emacs-ai-agent-bridge--ai-buffer-name))
-         (window (get-buffer-window buffer)))
+         (window (get-buffer-window buffer))
+         ;; Get window width for adjusting box lines
+         (window-width (if window
+                          (window-width window)
+                        80)) ; Default width if no window yet
+         ;; Adjust box drawing lines first
+         (adjusted-content (emacs-ai-agent-bridge-adjust-box-lines content window-width))
+         ;; Then trim trailing empty lines
+         (trimmed-content (replace-regexp-in-string "\\(\n\\s-*\\)+\\'" "" adjusted-content)))
     (with-current-buffer buffer
       (let ((inhibit-read-only t))
         (erase-buffer)
-        (insert content)
+        (insert trimmed-content)
         (goto-char (point-max)))
       ;; Make buffer read-only
       (setq buffer-read-only t)
