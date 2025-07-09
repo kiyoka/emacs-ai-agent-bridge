@@ -4,7 +4,7 @@ An Emacs extension that bridges an AI coding agent running in tmux with Emacs.
 
 ## Features
 
-- **Automatic tmux monitoring**: Monitor tmux session every 5 seconds
+- **Automatic tmux monitoring**: Monitor tmux session every 2 seconds
 - **Smart prompt detection**: Detect AI agent prompt state by monitoring content changes
 - **Non-intrusive buffer display**: Show *ai* buffer without stealing focus
 - **One-time notification**: Display buffer only once per prompt detection
@@ -35,7 +35,7 @@ To automatically start monitoring when Emacs starts:
 ;; Optional: Configure settings
 (setq emacs-ai-agent-bridge-tmux-session nil)  ; auto-detect session
 (setq emacs-ai-agent-bridge-tmux-pane "0")     ; monitor pane 0
-(setq emacs-ai-agent-bridge-monitor-interval 5) ; check every 5 seconds
+(setq emacs-ai-agent-bridge-monitor-interval 2) ; check every 2 seconds
 
 ;; Start monitoring automatically
 (emacs-ai-agent-bridge-start-monitoring)
@@ -83,13 +83,13 @@ M-x emacs-ai-agent-bridge-monitor-status
 ;; Pane ID to monitor (default: "0")
 (setq emacs-ai-agent-bridge-tmux-pane "0")
 
-;; Monitoring interval in seconds (default: 5)
-(setq emacs-ai-agent-bridge-monitor-interval 5)
+;; Monitoring interval in seconds (default: 2)
+(setq emacs-ai-agent-bridge-monitor-interval 2)
 ```
 
 ## How It Works
 
-1. **Monitoring**: The extension monitors tmux console content every 5 seconds
+1. **Monitoring**: The extension monitors tmux console content every 2 seconds
 2. **Detection**: When content remains unchanged, it assumes the AI agent is waiting for input
 3. **Notification**: The *ai* buffer is displayed once when a prompt is detected
 4. **Focus**: Your current buffer remains focused while the *ai* buffer is shown

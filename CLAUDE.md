@@ -26,7 +26,7 @@ When implementing this bridge, consider:
 - Repository is on the `prototyping-1` branch
 - Main implementation is in `emacs-ai-agent-bridge.el`
 - Core features implemented:
-  - Automatic tmux session monitoring (5-second intervals)
+  - Automatic tmux session monitoring (2-second intervals)
   - Prompt detection based on unchanged content (no pattern matching)
   - Automatic buffer display when prompt is detected (focus remains on current buffer)
   - Buffer shown only once per prompt detection
@@ -35,12 +35,12 @@ When implementing this bridge, consider:
 ## Implemented Features
 
 ### 1. tmux Monitoring
-- **Function**: `emacs-ai-agent-bridge-start-monitoring` - Starts monitoring tmux session every 5 seconds
+- **Function**: `emacs-ai-agent-bridge-start-monitoring` - Starts monitoring tmux session every 2 seconds
 - **Function**: `emacs-ai-agent-bridge-stop-monitoring` - Stops the monitoring timer
 - **Function**: `emacs-ai-agent-bridge-monitor-status` - Shows current monitoring status
 
 ### 2. Prompt Detection
-The system detects when the AI agent is waiting for input by monitoring if the tmux console content remains unchanged between checks. When the content doesn't change for 5 seconds, it's assumed the agent is at a prompt waiting for input.
+The system detects when the AI agent is waiting for input by monitoring if the tmux console content remains unchanged between checks. When the content doesn't change for 2 seconds, it's assumed the agent is at a prompt waiting for input.
 - Detection is based solely on content changes, not pattern matching
 - *ai* buffer is displayed only once when prompt is first detected
 - Buffer is reused if already visible, only content is updated
@@ -54,7 +54,7 @@ The system detects when the AI agent is waiting for input by monitoring if the t
 ### 4. Configuration Variables
 - `emacs-ai-agent-bridge-tmux-session` - tmux session to monitor (nil for auto-detect)
 - `emacs-ai-agent-bridge-tmux-pane` - Pane ID (default: "0")
-- `emacs-ai-agent-bridge-monitor-interval` - Check interval in seconds (default: 5)
+- `emacs-ai-agent-bridge-monitor-interval` - Check interval in seconds (default: 2)
 
 ## File Structure
 

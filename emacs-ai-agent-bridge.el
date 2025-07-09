@@ -26,7 +26,7 @@
 ;;; Commentary:
 
 ;; This package provides a bridge between Emacs and AI coding agents running in tmux.
-;; It monitors tmux console output every 5 seconds and detects
+;; It monitors tmux console output every 2 seconds and detects
 ;; when Claude Code is at an input prompt, then copies the content to an
 ;; Emacs buffer.
 
@@ -51,7 +51,7 @@ If nil, will use the first available session."
   :type 'string
   :group 'emacs-ai-agent-bridge)
 
-(defcustom emacs-ai-agent-bridge-monitor-interval 5
+(defcustom emacs-ai-agent-bridge-monitor-interval 2
   "Interval in seconds between tmux console checks."
   :type 'integer
   :group 'emacs-ai-agent-bridge)
