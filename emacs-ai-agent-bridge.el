@@ -171,17 +171,41 @@ Moves cursor to top with 3 Up keys, then moves down as needed, then presses Ente
     (with-temp-buffer
       (insert content)
       (goto-char (point-min))
-      ;; Only adjust outermost box lines (lines that start at column 0)
-      (while (re-search-forward "^\\([╭╰┌└├]\\)\\(─+\\)\\([╮╯┐┘┤]\\)$" nil t)
-        (let* ((start-char (match-string 1))
-               (line-chars (match-string 2))
-               (end-char (match-string 3))
-               (line-length (length line-chars))
-               (total-length (+ 2 line-length))) ; 2 for start and end chars
-          (when (> total-length max-width)
-            (let* ((new-line-length (- max-width 2))
-                   (new-line (make-string new-line-length ?─)))
-              (replace-match (concat start-char new-line end-char))))))
+      ;; First, replace ─ with - for consistent width
+      (while (search-forward "─" nil t)
+        (replace-match "-"))
+      (goto-char (point-min))
+      ;; Find if we need to adjust box width
+      (let ((needs-adjustment nil)
+            (new-line-length nil))
+        (save-excursion
+          (while (and (not needs-adjustment)
+                      (re-search-forward "^\\([╭╰┌└├]\\)\\(-+\\)\\([╮╯┐┘┤]\\)$" nil t))
+            (let* ((line-length (length (match-string 2)))
+                   (total-length (+ 2 line-length)))
+              (when (> total-length max-width)
+                (setq needs-adjustment t)
+                (setq new-line-length (- max-width 2))))))
+        ;; If adjustment is needed, adjust both horizontal and vertical lines
+        (when needs-adjustment
+          (goto-char (point-min))
+          ;; Adjust horizontal lines
+          (while (re-search-forward "^\\([╭╰┌└├]\\)\\(-+\\)\\([╮╯┐┘┤]\\)$" nil t)
+            (let* ((start-char (match-string 1))
+                   (end-char (match-string 3))
+                   (new-line (make-string new-line-length ?-)))
+              (replace-match (concat start-char new-line end-char))))
+          ;; Adjust vertical lines with content
+          (goto-char (point-min))
+          (while (re-search-forward "^│\\(.+\\)│$" nil t)
+            (let* ((content-str (match-string 1))
+                   (content-length (length content-str))
+                   (padding-needed (- new-line-length content-length))
+                   (new-content (if (> padding-needed 0)
+                                    (concat content-str (make-string padding-needed ?\s))
+                                  ;; Truncate content if too long
+                                  (substring content-str 0 new-line-length))))
+              (replace-match (concat "│" new-content "│"))))))
       (buffer-string))))
 
 (defun emacs-ai-agent-bridge-update-ai-buffer (content)
