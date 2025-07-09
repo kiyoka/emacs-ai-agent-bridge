@@ -69,6 +69,14 @@ If nil, will use the first available session."
 (defvar emacs-ai-agent-bridge--prompt-detected nil
   "Flag to track if prompt has already been detected and buffer shown.")
 
+(defvar emacs-ai-agent-bridge-mode-map
+  (let ((map (make-sparse-keymap)))
+    (define-key map "1" 'select-ai-option-1)
+    (define-key map "2" 'select-ai-option-2)
+    (define-key map "3" 'select-ai-option-3)
+    map)
+  "Keymap for *ai* buffer.")
+
 (defun emacs-ai-agent-bridge-get-first-tmux-session ()
   "Get the name of the first available tmux session."
   (let ((output (shell-command-to-string "tmux list-sessions -F '#{session_name}' 2>/dev/null")))
@@ -162,9 +170,20 @@ Moves cursor to top with 3 Up keys, then moves down as needed, then presses Ente
   (let* ((buffer (get-buffer-create emacs-ai-agent-bridge--ai-buffer-name))
          (window (get-buffer-window buffer)))
     (with-current-buffer buffer
-      (erase-buffer)
-      (insert content)
-      (goto-char (point-max)))
+      (let ((inhibit-read-only t))
+        (erase-buffer)
+        (insert content)
+        (goto-char (point-max)))
+      ;; Make buffer read-only
+      (setq buffer-read-only t)
+      ;; Apply the keymap
+      (use-local-map emacs-ai-agent-bridge-mode-map)
+      ;; Set buffer-file-name to allow editing emacs-ai-agent-bridge.el
+      (let ((dir (file-name-directory (or load-file-name
+                                          (buffer-file-name)
+                                          default-directory))))
+        (when dir
+          (setq buffer-file-name (expand-file-name "emacs-ai-agent-bridge.el" dir)))))
     ;; Only display buffer if it's not already visible
     (unless window
       (display-buffer buffer '(display-buffer-pop-up-window)))
