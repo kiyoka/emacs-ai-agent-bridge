@@ -46,13 +46,6 @@ To automatically start monitoring when Emacs starts:
 
 ## Usage
 
-### Start Monitoring
-
-#### Manual Start
-```
-M-x emacs-ai-agent-bridge-start-monitoring
-```
-
 ### Send Text to AI Agent
 1. Select text region
 2. Execute:
