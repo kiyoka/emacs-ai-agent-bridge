@@ -115,6 +115,22 @@ M-x emacs-ai-agent-bridge-monitor-status
 - tmux
 - AI coding agent running in tmux (e.g., Claude Code)
 
+## System Architecture
+
+```mermaid
+sequenceDiagram
+    participant Emacs
+    participant tmux
+    participant "Coding Agent"
+
+    Emacs->>+tmux: send-to-ai (Selected Text)
+    tmux->>+"Coding Agent": Paste text & Execute
+    "Coding Agent"-->>-tmux: Process and generate output
+    tmux-->>-Emacs: (Monitoring) Capture pane content
+    Note right of Emacs: Continuously monitors tmux pane<br/>for changes and updates *ai* buffer.
+    Emacs->>Emacs: Update *ai* buffer with new content
+```
+
 ## License
 
 GPL v3
