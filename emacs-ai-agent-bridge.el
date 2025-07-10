@@ -71,9 +71,9 @@ If nil, will use the first available session."
 
 (defvar emacs-ai-agent-bridge-mode-map
   (let ((map (make-sparse-keymap)))
-    (define-key map "1" 'select-ai-option-1)
-    (define-key map "2" 'select-ai-option-2)
-    (define-key map "3" 'select-ai-option-3)
+    (define-key map "1" 'emacs-ai-select-option-1)
+    (define-key map "2" 'emacs-ai-select-option-2)
+    (define-key map "3" 'emacs-ai-select-option-3)
     map)
   "Keymap for *ai* buffer.")
 
@@ -133,17 +133,17 @@ Moves cursor to top with 3 Up keys, then moves down as needed, then presses Ente
           (message "Selected option %d" option-number))
       (message "No tmux sessions found"))))
 
-(defun select-ai-option-1 ()
+(defun emacs-ai-select-option-1 ()
   "Select option 1 from AI agent's choice prompt."
   (interactive)
   (emacs-ai-agent-bridge-select-option 1))
 
-(defun select-ai-option-2 ()
+(defun emacs-ai-select-option-2 ()
   "Select option 2 from AI agent's choice prompt."
   (interactive)
   (emacs-ai-agent-bridge-select-option 2))
 
-(defun select-ai-option-3 ()
+(defun emacs-ai-select-option-3 ()
   "Select option 3 from AI agent's choice prompt."
   (interactive)
   (emacs-ai-agent-bridge-select-option 3))
