@@ -74,6 +74,7 @@ If nil, will use the first available session."
     (define-key map "1" 'emacs-ai-select-option-1)
     (define-key map "2" 'emacs-ai-select-option-2)
     (define-key map "3" 'emacs-ai-select-option-3)
+    (define-key map (kbd "C-m") 'emacs-ai-agent-bridge-smart-return)
     map)
   "Keymap for *ai* buffer.")
 
@@ -148,6 +149,14 @@ Moves cursor to top with 3 Up keys, then moves down as needed, then presses Ente
   (interactive)
   (emacs-ai-agent-bridge-select-option 3))
 
+(defun emacs-ai-agent-bridge-smart-return ()
+  "Smart return key behavior for *ai* buffer.
+If the buffer contains a choice prompt, select option 1.
+Otherwise, do nothing."
+  (interactive)
+  (when (emacs-ai-agent-bridge-is-choice-prompt-p (buffer-string))
+    (emacs-ai-select-option-1)))
+
 (defun emacs-ai-agent-bridge-capture-tmux-pane ()
   "Capture the current content of the configured tmux pane."
   (let* ((session (or emacs-ai-agent-bridge-tmux-session
@@ -194,7 +203,7 @@ Moves cursor to top with 3 Up keys, then moves down as needed, then presses Ente
             (let* ((start-char (match-string 1))
                    (end-char (match-string 3))
                    (new-line (make-string new-line-length ?-)))
-              (replace-match (concat start-char new-line end-char))))
+              (replace-match (concat start-char new-line end-char) t t)))
           ;; Adjust vertical lines with content
           (goto-char (point-min))
           (while (re-search-forward "^│\\(.+\\)│$" nil t)
@@ -205,8 +214,26 @@ Moves cursor to top with 3 Up keys, then moves down as needed, then presses Ente
                                     (concat content-str (make-string padding-needed ?\s))
                                   ;; Truncate content if too long
                                   (substring content-str 0 new-line-length))))
-              (replace-match (concat "│" new-content "│"))))))
+              (replace-match (concat "│" new-content "│") t t)))))
       (buffer-string))))
+
+(defun emacs-ai-agent-bridge-is-choice-prompt-p (content)
+  "Check if CONTENT contains a choice prompt with numbered options."
+  (with-temp-buffer
+    (insert content)
+    (goto-char (point-min))
+    ;; Look for lines that start with number followed by a dot, possibly within box drawing characters
+    (re-search-forward "[│|][[:space:]]*[❯]?[[:space:]]*[1-9]\\." nil t)))
+
+(defun emacs-ai-agent-bridge-is-text-input-prompt-p (content)
+  "Check if CONTENT is a simple text input prompt (contains only '>')."
+  (with-temp-buffer
+    (insert content)
+    (goto-char (point-min))
+    ;; Look for a line containing only '>' (with possible spaces)
+    (and (re-search-forward "^[│|][[:space:]]*>[[:space:]]*[│|]$" nil t)
+         ;; Make sure there are no numbered options
+         (not (emacs-ai-agent-bridge-is-choice-prompt-p content)))))
 
 (defun emacs-ai-agent-bridge-display-ai-buffer (buffer)
   "Display the AI BUFFER, ensuring only two windows are shown."
@@ -217,6 +244,18 @@ Moves cursor to top with 3 Up keys, then moves down as needed, then presses Ente
     (other-window 1)
     (switch-to-buffer buffer)
     (other-window 1)))
+
+(defun emacs-ai-agent-bridge-colorize-options (content)
+  "Add color to option numbers (1., 2., 3.) in CONTENT."
+  (with-temp-buffer
+    (insert content)
+    (goto-char (point-min))
+    ;; Find and colorize option numbers
+    (while (re-search-forward "\\([1-3]\\.\\)" nil t)
+      (let ((start (match-beginning 1))
+            (end (match-end 1)))
+        (put-text-property start end 'face 'font-lock-keyword-face)))
+    (buffer-string)))
 
 (defun emacs-ai-agent-bridge-update-ai-buffer (content)
   "Update the *ai* buffer with CONTENT and display it without switching focus."
@@ -229,11 +268,15 @@ Moves cursor to top with 3 Up keys, then moves down as needed, then presses Ente
          ;; Adjust box drawing lines first
          (adjusted-content (emacs-ai-agent-bridge-adjust-box-lines content window-width))
          ;; Then trim trailing empty lines
-         (trimmed-content (replace-regexp-in-string "\\(\n\\s-*\\)+\\'" "" adjusted-content)))
+         (trimmed-content (replace-regexp-in-string "\\(\n\\s-*\\)+\\'" "" adjusted-content))
+         ;; Finally colorize options if it's a choice prompt
+         (final-content (if (emacs-ai-agent-bridge-is-choice-prompt-p trimmed-content)
+                           (emacs-ai-agent-bridge-colorize-options trimmed-content)
+                         trimmed-content)))
     (with-current-buffer buffer
       (let ((inhibit-read-only t))
         (erase-buffer)
-        (insert trimmed-content)
+        (insert final-content)
         (goto-char (point-max)))
       ;; Make buffer read-only
       (setq buffer-read-only t)
