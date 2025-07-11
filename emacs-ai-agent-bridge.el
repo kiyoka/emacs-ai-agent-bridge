@@ -208,6 +208,16 @@ Moves cursor to top with 3 Up keys, then moves down as needed, then presses Ente
               (replace-match (concat "│" new-content "│"))))))
       (buffer-string))))
 
+(defun emacs-ai-agent-bridge-display-ai-buffer (buffer)
+  "Display the AI BUFFER, ensuring only two windows are shown."
+  ;; Only modify window configuration if buffer is not already visible
+  (unless (get-buffer-window buffer)
+    (delete-other-windows)
+    (split-window-vertically)
+    (other-window 1)
+    (switch-to-buffer buffer)
+    (other-window 1)))
+
 (defun emacs-ai-agent-bridge-update-ai-buffer (content)
   "Update the *ai* buffer with CONTENT and display it without switching focus."
   (let* ((buffer (get-buffer-create emacs-ai-agent-bridge--ai-buffer-name))
@@ -233,7 +243,7 @@ Moves cursor to top with 3 Up keys, then moves down as needed, then presses Ente
       (setq buffer-file-name nil))
     ;; Only display buffer if it's not already visible
     (unless window
-      (display-buffer buffer '(display-buffer-pop-up-window)))
+      (emacs-ai-agent-bridge-display-ai-buffer buffer))
     ;; If window exists, scroll to bottom
     (when window
       (with-selected-window window
