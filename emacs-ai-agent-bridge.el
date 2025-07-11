@@ -74,6 +74,8 @@ If nil, will use the first available session."
     (define-key map "1" 'emacs-ai-select-option-1)
     (define-key map "2" 'emacs-ai-select-option-2)
     (define-key map "3" 'emacs-ai-select-option-3)
+    (define-key map "4" 'emacs-ai-select-option-4)
+    (define-key map "5" 'emacs-ai-select-option-5)
     (define-key map (kbd "C-m") 'emacs-ai-agent-bridge-smart-return)
     map)
   "Keymap for *ai* buffer.")
@@ -111,13 +113,13 @@ This is an alias for `emacs-ai-agent-bridge-send-region-to-tmux'."
 
 (defun emacs-ai-agent-bridge-select-option (option-number)
   "Select an option from AI agent's choice prompt.
-OPTION-NUMBER should be 1, 2, or 3.
-Moves cursor to top with 3 Up keys, then moves down as needed, then presses Enter."
+OPTION-NUMBER should be 1, 2, 3, 4, or 5.
+Moves cursor to top with 5 Up keys, then moves down as needed, then presses Enter."
   (let ((session (emacs-ai-agent-bridge-get-first-tmux-session)))
     (if session
         (progn
-          ;; Send 3 Up arrow keys to move to the top
-          (dotimes (_ 3)
+          ;; Send 5 Up arrow keys to move to the top
+          (dotimes (_ 5)
             (shell-command
              (format "tmux send-keys -t %s Up"
                      (shell-quote-argument session))))
@@ -149,13 +151,40 @@ Moves cursor to top with 3 Up keys, then moves down as needed, then presses Ente
   (interactive)
   (emacs-ai-agent-bridge-select-option 3))
 
+(defun emacs-ai-select-option-4 ()
+  "Select option 4 from AI agent's choice prompt."
+  (interactive)
+  (emacs-ai-agent-bridge-select-option 4))
+
+(defun emacs-ai-select-option-5 ()
+  "Select option 5 from AI agent's choice prompt."
+  (interactive)
+  (emacs-ai-agent-bridge-select-option 5))
+
 (defun emacs-ai-agent-bridge-smart-return ()
   "Smart return key behavior for *ai* buffer.
 If the buffer contains a choice prompt, select option 1.
+If it's a text input prompt, send Enter to tmux.
 Otherwise, do nothing."
   (interactive)
-  (when (emacs-ai-agent-bridge-is-choice-prompt-p (buffer-string))
-    (emacs-ai-select-option-1)))
+  (let ((content (buffer-string))
+        (session (emacs-ai-agent-bridge-get-first-tmux-session)))
+    (cond
+     ;; Choice prompt - select option 1
+     ((emacs-ai-agent-bridge-is-choice-prompt-p content)
+      (emacs-ai-select-option-1))
+     ;; Text input prompt or any other prompt - send Enter
+     ((or (emacs-ai-agent-bridge-is-text-input-prompt-p content)
+          ;; Always allow Enter if we're at a prompt (content unchanged)
+          emacs-ai-agent-bridge--prompt-detected)
+      (when session
+        (shell-command
+         (format "tmux send-keys -t %s C-m"
+                 (shell-quote-argument session)))
+        (message "Sent Enter to tmux session: %s" session)))
+     ;; No prompt detected
+     (t
+      (message "No prompt detected in *ai* buffer")))))
 
 (defun emacs-ai-agent-bridge-capture-tmux-pane ()
   "Capture the current content of the configured tmux pane."
@@ -222,8 +251,12 @@ Otherwise, do nothing."
   (with-temp-buffer
     (insert content)
     (goto-char (point-min))
-    ;; Look for lines that start with number followed by a dot, possibly within box drawing characters
-    (re-search-forward "[│|][[:space:]]*[❯]?[[:space:]]*[1-9]\\." nil t)))
+    ;; Look for lines that start with number followed by a dot
+    ;; More flexible pattern that works with or without box drawing characters
+    (or (re-search-forward "[│|][[:space:]]*[❯]?[[:space:]]*[1-9]\\." nil t)
+        (re-search-forward "^[[:space:]]*[❯]?[[:space:]]*[1-9]\\." nil t)
+        ;; Also check for simple "1." pattern anywhere in the line
+        (re-search-forward "[[:space:]][1-9]\\.[[:space:]]" nil t))))
 
 (defun emacs-ai-agent-bridge-is-text-input-prompt-p (content)
   "Check if CONTENT is a simple text input prompt (contains only '>')."
@@ -251,7 +284,7 @@ Otherwise, do nothing."
     (insert content)
     (goto-char (point-min))
     ;; Find and colorize option numbers
-    (while (re-search-forward "\\([1-3]\\.\\)" nil t)
+    (while (re-search-forward "\\([1-5]\\.\\)" nil t)
       (let ((start (match-beginning 1))
             (end (match-end 1)))
         (put-text-property start end 'face 'font-lock-keyword-face)))
@@ -278,10 +311,12 @@ Otherwise, do nothing."
         (erase-buffer)
         (insert final-content)
         (goto-char (point-max)))
+      ;; Apply the keymap BEFORE making buffer read-only
+      (use-local-map emacs-ai-agent-bridge-mode-map)
       ;; Make buffer read-only
       (setq buffer-read-only t)
-      ;; Apply the keymap
-      (use-local-map emacs-ai-agent-bridge-mode-map)
+      ;; Force override C-m binding after setting read-only
+      (local-set-key (kbd "C-m") 'emacs-ai-agent-bridge-smart-return)
       ;; Ensure buffer has no file association (like *scratch*)
       (setq buffer-file-name nil))
     ;; Only display buffer if it's not already visible
@@ -344,6 +379,23 @@ Otherwise, do nothing."
                  emacs-ai-agent-bridge-tmux-pane
                  emacs-ai-agent-bridge-monitor-interval))
     (message "Not currently monitoring tmux")))
+
+(defun emacs-ai-agent-bridge-debug-buffer ()
+  "Debug information about the *ai* buffer."
+  (interactive)
+  (let ((buffer (get-buffer emacs-ai-agent-bridge--ai-buffer-name)))
+    (if buffer
+        (with-current-buffer buffer
+          (message "Buffer: %s, Read-only: %s, Major mode: %s, Keymap: %s, C-m binding: %s, Choice prompt: %s, Text prompt: %s, Prompt detected: %s"
+                   (buffer-name)
+                   buffer-read-only
+                   major-mode
+                   (if (eq (current-local-map) emacs-ai-agent-bridge-mode-map) "correct" "incorrect")
+                   (key-binding (kbd "C-m"))
+                   (emacs-ai-agent-bridge-is-choice-prompt-p (buffer-string))
+                   (emacs-ai-agent-bridge-is-text-input-prompt-p (buffer-string))
+                   emacs-ai-agent-bridge--prompt-detected))
+      (message "Buffer %s not found" emacs-ai-agent-bridge--ai-buffer-name))))
 
 (provide 'emacs-ai-agent-bridge)
 ;;; emacs-ai-agent-bridge.el ends here
