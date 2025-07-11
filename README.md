@@ -1,5 +1,7 @@
 # emacs-ai-agent-bridge
 
+*Read this in other languages: [日本語](README.ja.md)*
+
 An Emacs extension that bridges an AI coding agent running in tmux with Emacs.
 
 ## Features
@@ -65,6 +67,9 @@ When the AI agent presents multiple choice options in the *ai* buffer, you can r
    - Press `1` to select the first option
    - Press `2` to select the second option  
    - Press `3` to select the third option
+   - Press `4` to select the fourth option
+   - Press `5` to select the fifth option
+   - Press `Enter` (C-m) to select the first option (default choice)
 
 Example prompt:
 ```
@@ -76,7 +81,7 @@ Example prompt:
 ╰───────────────────────────────────────────────────────────────────────────────────────╯
 ```
 
-Simply press `1`, `2`, or `3` in the *ai* buffer to send your selection to the AI agent.
+Simply press `1`, `2`, `3`, `4`, or `5` in the *ai* buffer to send your selection to the AI agent. You can also press `Enter` to quickly select the first option.
 
 ### Stop Monitoring
 ```

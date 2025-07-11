@@ -74,6 +74,9 @@ If nil, will use the first available session."
     (define-key map "1" 'emacs-ai-select-option-1)
     (define-key map "2" 'emacs-ai-select-option-2)
     (define-key map "3" 'emacs-ai-select-option-3)
+    (define-key map "4" 'emacs-ai-select-option-4)
+    (define-key map "5" 'emacs-ai-select-option-5)
+    (define-key map (kbd "C-m") 'emacs-ai-agent-bridge-smart-return)
     map)
   "Keymap for *ai* buffer.")
 
@@ -110,13 +113,13 @@ This is an alias for `emacs-ai-agent-bridge-send-region-to-tmux'."
 
 (defun emacs-ai-agent-bridge-select-option (option-number)
   "Select an option from AI agent's choice prompt.
-OPTION-NUMBER should be 1, 2, or 3.
-Moves cursor to top with 3 Up keys, then moves down as needed, then presses Enter."
+OPTION-NUMBER should be 1, 2, 3, 4, or 5.
+Moves cursor to top with 5 Up keys, then moves down as needed, then presses Enter."
   (let ((session (emacs-ai-agent-bridge-get-first-tmux-session)))
     (if session
         (progn
-          ;; Send 3 Up arrow keys to move to the top
-          (dotimes (_ 3)
+          ;; Send 5 Up arrow keys to move to the top
+          (dotimes (_ 5)
             (shell-command
              (format "tmux send-keys -t %s Up"
                      (shell-quote-argument session))))
@@ -147,6 +150,41 @@ Moves cursor to top with 3 Up keys, then moves down as needed, then presses Ente
   "Select option 3 from AI agent's choice prompt."
   (interactive)
   (emacs-ai-agent-bridge-select-option 3))
+
+(defun emacs-ai-select-option-4 ()
+  "Select option 4 from AI agent's choice prompt."
+  (interactive)
+  (emacs-ai-agent-bridge-select-option 4))
+
+(defun emacs-ai-select-option-5 ()
+  "Select option 5 from AI agent's choice prompt."
+  (interactive)
+  (emacs-ai-agent-bridge-select-option 5))
+
+(defun emacs-ai-agent-bridge-smart-return ()
+  "Smart return key behavior for *ai* buffer.
+If the buffer contains a choice prompt, select option 1.
+If it's a text input prompt, send Enter to tmux.
+Otherwise, do nothing."
+  (interactive)
+  (let ((content (buffer-string))
+        (session (emacs-ai-agent-bridge-get-first-tmux-session)))
+    (cond
+     ;; Choice prompt - select option 1
+     ((emacs-ai-agent-bridge-is-choice-prompt-p content)
+      (emacs-ai-select-option-1))
+     ;; Text input prompt or any other prompt - send Enter
+     ((or (emacs-ai-agent-bridge-is-text-input-prompt-p content)
+          ;; Always allow Enter if we're at a prompt (content unchanged)
+          emacs-ai-agent-bridge--prompt-detected)
+      (when session
+        (shell-command
+         (format "tmux send-keys -t %s C-m"
+                 (shell-quote-argument session)))
+        (message "Sent Enter to tmux session: %s" session)))
+     ;; No prompt detected
+     (t
+      (message "No prompt detected in *ai* buffer")))))
 
 (defun emacs-ai-agent-bridge-capture-tmux-pane ()
   "Capture the current content of the configured tmux pane."
@@ -194,7 +232,7 @@ Moves cursor to top with 3 Up keys, then moves down as needed, then presses Ente
             (let* ((start-char (match-string 1))
                    (end-char (match-string 3))
                    (new-line (make-string new-line-length ?-)))
-              (replace-match (concat start-char new-line end-char))))
+              (replace-match (concat start-char new-line end-char) t t)))
           ;; Adjust vertical lines with content
           (goto-char (point-min))
           (while (re-search-forward "^│\\(.+\\)│$" nil t)
@@ -205,8 +243,52 @@ Moves cursor to top with 3 Up keys, then moves down as needed, then presses Ente
                                     (concat content-str (make-string padding-needed ?\s))
                                   ;; Truncate content if too long
                                   (substring content-str 0 new-line-length))))
-              (replace-match (concat "│" new-content "│"))))))
+              (replace-match (concat "│" new-content "│") t t)))))
       (buffer-string))))
+
+(defun emacs-ai-agent-bridge-is-choice-prompt-p (content)
+  "Check if CONTENT contains a choice prompt with numbered options."
+  (with-temp-buffer
+    (insert content)
+    (goto-char (point-min))
+    ;; Look for lines that start with number followed by a dot
+    ;; More flexible pattern that works with or without box drawing characters
+    (or (re-search-forward "[│|][[:space:]]*[❯]?[[:space:]]*[1-9]\\." nil t)
+        (re-search-forward "^[[:space:]]*[❯]?[[:space:]]*[1-9]\\." nil t)
+        ;; Also check for simple "1." pattern anywhere in the line
+        (re-search-forward "[[:space:]][1-9]\\.[[:space:]]" nil t))))
+
+(defun emacs-ai-agent-bridge-is-text-input-prompt-p (content)
+  "Check if CONTENT is a simple text input prompt (contains only '>')."
+  (with-temp-buffer
+    (insert content)
+    (goto-char (point-min))
+    ;; Look for a line containing only '>' (with possible spaces)
+    (and (re-search-forward "^[│|][[:space:]]*>[[:space:]]*[│|]$" nil t)
+         ;; Make sure there are no numbered options
+         (not (emacs-ai-agent-bridge-is-choice-prompt-p content)))))
+
+(defun emacs-ai-agent-bridge-display-ai-buffer (buffer)
+  "Display the AI BUFFER, ensuring only two windows are shown."
+  ;; Only modify window configuration if buffer is not already visible
+  (unless (get-buffer-window buffer)
+    (delete-other-windows)
+    (split-window-vertically)
+    (other-window 1)
+    (switch-to-buffer buffer)
+    (other-window 1)))
+
+(defun emacs-ai-agent-bridge-colorize-options (content)
+  "Add color to option numbers (1., 2., 3.) in CONTENT."
+  (with-temp-buffer
+    (insert content)
+    (goto-char (point-min))
+    ;; Find and colorize option numbers
+    (while (re-search-forward "\\([1-5]\\.\\)" nil t)
+      (let ((start (match-beginning 1))
+            (end (match-end 1)))
+        (put-text-property start end 'face 'font-lock-keyword-face)))
+    (buffer-string)))
 
 (defun emacs-ai-agent-bridge-update-ai-buffer (content)
   "Update the *ai* buffer with CONTENT and display it without switching focus."
@@ -219,21 +301,27 @@ Moves cursor to top with 3 Up keys, then moves down as needed, then presses Ente
          ;; Adjust box drawing lines first
          (adjusted-content (emacs-ai-agent-bridge-adjust-box-lines content window-width))
          ;; Then trim trailing empty lines
-         (trimmed-content (replace-regexp-in-string "\\(\n\\s-*\\)+\\'" "" adjusted-content)))
+         (trimmed-content (replace-regexp-in-string "\\(\n\\s-*\\)+\\'" "" adjusted-content))
+         ;; Finally colorize options if it's a choice prompt
+         (final-content (if (emacs-ai-agent-bridge-is-choice-prompt-p trimmed-content)
+                           (emacs-ai-agent-bridge-colorize-options trimmed-content)
+                         trimmed-content)))
     (with-current-buffer buffer
       (let ((inhibit-read-only t))
         (erase-buffer)
-        (insert trimmed-content)
+        (insert final-content)
         (goto-char (point-max)))
+      ;; Apply the keymap BEFORE making buffer read-only
+      (use-local-map emacs-ai-agent-bridge-mode-map)
       ;; Make buffer read-only
       (setq buffer-read-only t)
-      ;; Apply the keymap
-      (use-local-map emacs-ai-agent-bridge-mode-map)
+      ;; Force override C-m binding after setting read-only
+      (local-set-key (kbd "C-m") 'emacs-ai-agent-bridge-smart-return)
       ;; Ensure buffer has no file association (like *scratch*)
       (setq buffer-file-name nil))
     ;; Only display buffer if it's not already visible
     (unless window
-      (display-buffer buffer '(display-buffer-pop-up-window)))
+      (emacs-ai-agent-bridge-display-ai-buffer buffer))
     ;; If window exists, scroll to bottom
     (when window
       (with-selected-window window
@@ -291,6 +379,23 @@ Moves cursor to top with 3 Up keys, then moves down as needed, then presses Ente
                  emacs-ai-agent-bridge-tmux-pane
                  emacs-ai-agent-bridge-monitor-interval))
     (message "Not currently monitoring tmux")))
+
+(defun emacs-ai-agent-bridge-debug-buffer ()
+  "Debug information about the *ai* buffer."
+  (interactive)
+  (let ((buffer (get-buffer emacs-ai-agent-bridge--ai-buffer-name)))
+    (if buffer
+        (with-current-buffer buffer
+          (message "Buffer: %s, Read-only: %s, Major mode: %s, Keymap: %s, C-m binding: %s, Choice prompt: %s, Text prompt: %s, Prompt detected: %s"
+                   (buffer-name)
+                   buffer-read-only
+                   major-mode
+                   (if (eq (current-local-map) emacs-ai-agent-bridge-mode-map) "correct" "incorrect")
+                   (key-binding (kbd "C-m"))
+                   (emacs-ai-agent-bridge-is-choice-prompt-p (buffer-string))
+                   (emacs-ai-agent-bridge-is-text-input-prompt-p (buffer-string))
+                   emacs-ai-agent-bridge--prompt-detected))
+      (message "Buffer %s not found" emacs-ai-agent-bridge--ai-buffer-name))))
 
 (provide 'emacs-ai-agent-bridge)
 ;;; emacs-ai-agent-bridge.el ends here
