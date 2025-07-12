@@ -11,6 +11,7 @@ An Emacs extension that bridges an AI coding agent running in tmux with Emacs.
 - **Non-intrusive buffer display**: Show *ai* buffer without stealing focus
 - **One-time notification**: Display buffer only once per prompt detection
 - **Easy text sending**: Send selected region to AI agent with automatic execution
+- **Context awareness**: Automatically includes file path and line number with sent text
 
 ## Installation
 
@@ -77,7 +78,7 @@ Then you can use @ai prefix for quick prompts:
 ```
 @ai What is the capital of France? [Enter]
 ```
-The text after @ai will be sent to the AI agent and the line will be deleted.
+The text after @ai will be sent to the AI agent and the line will be deleted. The AI agent will receive the prompt with context information about the current file and line number.
 
 **Multi-line prompt:**
 ```
@@ -87,7 +88,7 @@ You can write multiple lines here.
 Each line will be sent as part of the prompt.
 @ai-end [Enter on this line]
 ```
-When you press Enter on the @ai-end line, the entire block (excluding @ai-begin and @ai-end markers) will be sent to the AI agent and the block will be deleted.
+When you press Enter on the @ai-end line, the entire block (excluding @ai-begin and @ai-end markers) will be sent to the AI agent and the block will be deleted. The AI agent will receive the context information (file name and line number of the @ai-begin line) followed by your multi-line content.
 
 ### Respond to AI Agent Prompts
 When the AI agent presents multiple choice options in the *ai* buffer, you can respond quickly using number keys:
@@ -158,8 +159,8 @@ sequenceDiagram
     participant tmux
     participant "Coding Agent"
 
-    Emacs->>+tmux: send-to-ai (Selected Text)
-    tmux->>+"Coding Agent": Paste text & Execute
+    Emacs->>+tmux: send-to-ai (Context + Selected Text)
+    tmux->>+"Coding Agent": Paste text with file:line info & Execute
     "Coding Agent"-->>-tmux: Process and generate output
     tmux-->>-Emacs: (Monitoring) Capture pane content
     Note right of Emacs: Continuously monitors tmux pane<br/>for changes and updates *ai* buffer.
