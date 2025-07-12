@@ -87,6 +87,22 @@ If nil, will use the first available session."
         nil
       (car (split-string output "\n" t)))))
 
+(defun emacs-ai-agent-bridge-send-to-tmux (session text)
+  "Send TEXT to tmux SESSION.
+This is a helper function to avoid code duplication."
+  (shell-command
+   (format "tmux send-keys -t %s %s"
+           (shell-quote-argument session)
+           (shell-quote-argument text))))
+
+(defun emacs-ai-agent-bridge-send-key-to-tmux (session key)
+  "Send KEY to tmux SESSION.
+Common keys: C-m (Enter), Up, Down, etc."
+  (shell-command
+   (format "tmux send-keys -t %s %s"
+           (shell-quote-argument session)
+           key)))
+
 (defun emacs-ai-agent-bridge-send-region-to-tmux (start end)
   "Send the region between START and END to the first available tmux session."
   (interactive "r")
@@ -95,13 +111,8 @@ If nil, will use the first available session."
     (if session
         (progn
           ;; Send text first, then send Enter key separately
-          (shell-command
-           (format "tmux send-keys -t %s %s"
-                   (shell-quote-argument session)
-                   (shell-quote-argument text)))
-          (shell-command
-           (format "tmux send-keys -t %s C-m"
-                   (shell-quote-argument session)))
+          (emacs-ai-agent-bridge-send-to-tmux session text)
+          (emacs-ai-agent-bridge-send-key-to-tmux session "C-m")
           (message "Sent region to tmux session: %s" session))
       (message "No tmux sessions found"))))
 
@@ -120,19 +131,13 @@ Moves cursor to top with 5 Up keys, then moves down as needed, then presses Ente
         (progn
           ;; Send 5 Up arrow keys to move to the top
           (dotimes (_ 5)
-            (shell-command
-             (format "tmux send-keys -t %s Up"
-                     (shell-quote-argument session))))
+            (emacs-ai-agent-bridge-send-key-to-tmux session "Up"))
           ;; Send Down arrow keys based on option number
           (when (> option-number 1)
             (dotimes (_ (1- option-number))
-              (shell-command
-               (format "tmux send-keys -t %s Down"
-                       (shell-quote-argument session)))))
+              (emacs-ai-agent-bridge-send-key-to-tmux session "Down")))
           ;; Send Enter key (C-m)
-          (shell-command
-           (format "tmux send-keys -t %s C-m"
-                   (shell-quote-argument session)))
+          (emacs-ai-agent-bridge-send-key-to-tmux session "C-m")
           (message "Selected option %d" option-number))
       (message "No tmux sessions found"))))
 
@@ -178,9 +183,7 @@ Otherwise, do nothing."
           ;; Always allow Enter if we're at a prompt (content unchanged)
           emacs-ai-agent-bridge--prompt-detected)
       (when session
-        (shell-command
-         (format "tmux send-keys -t %s C-m"
-                 (shell-quote-argument session)))
+        (emacs-ai-agent-bridge-send-key-to-tmux session "C-m")
         (message "Sent Enter to tmux session: %s" session)))
      ;; No prompt detected
      (t
@@ -429,14 +432,9 @@ Send the text after @ai to tmux and delete the line."
         (if session
             (progn
               ;; Send the prompt text
-              (shell-command
-               (format "tmux send-keys -t %s %s"
-                       (shell-quote-argument session)
-                       (shell-quote-argument prompt)))
+              (emacs-ai-agent-bridge-send-to-tmux session prompt)
               ;; Send Enter key
-              (shell-command
-               (format "tmux send-keys -t %s C-m"
-                       (shell-quote-argument session)))
+              (emacs-ai-agent-bridge-send-key-to-tmux session "C-m")
               ;; Delete the @ai line
               (delete-region (line-beginning-position) 
                              (min (1+ (line-end-position)) (point-max)))
@@ -469,14 +467,9 @@ Send the text after @ai to tmux and delete the line."
                       ;; Join lines with newlines and send as one command
                       (let ((full-text (mapconcat 'identity (nreverse lines) "\n")))
                         ;; Send the entire text
-                        (shell-command
-                         (format "tmux send-keys -t %s %s"
-                                 (shell-quote-argument session)
-                                 (shell-quote-argument full-text)))
+                        (emacs-ai-agent-bridge-send-to-tmux session full-text)
                         ;; Send Enter key to execute
-                        (shell-command
-                         (format "tmux send-keys -t %s C-m"
-                                 (shell-quote-argument session)))))
+                        (emacs-ai-agent-bridge-send-key-to-tmux session "C-m")))
                     ;; Delete the entire block
                     (delete-region begin-pos end-pos)
                     (message "Sent multi-line prompt to AI")
