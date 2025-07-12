@@ -106,12 +106,23 @@ Common keys: C-m (Enter), Up, Down, etc."
 (defun emacs-ai-agent-bridge-send-region-to-tmux (start end)
   "Send the region between START and END to the first available tmux session."
   (interactive "r")
-  (let ((session (emacs-ai-agent-bridge-get-first-tmux-session))
-        (text (buffer-substring-no-properties start end)))
+  (let* ((session (emacs-ai-agent-bridge-get-first-tmux-session))
+         (text (buffer-substring-no-properties start end))
+         ;; Get file path and line number
+         (file-path (or (buffer-file-name) "untitled buffer"))
+         (line-number (line-number-at-pos start))
+         ;; Create annotation in English
+         (annotation (format "This is from %s at line %d.\n\n" 
+                           (if (buffer-file-name)
+                               (file-name-nondirectory file-path)
+                             file-path)
+                           line-number))
+         ;; Prepend annotation to text
+         (annotated-text (concat annotation text)))
     (if session
         (progn
-          ;; Send text first, then send Enter key separately
-          (emacs-ai-agent-bridge-send-to-tmux session text)
+          ;; Send annotated text first, then send Enter key separately
+          (emacs-ai-agent-bridge-send-to-tmux session annotated-text)
           (emacs-ai-agent-bridge-send-key-to-tmux session "C-m")
           (message "Sent region to tmux session: %s" session))
       (message "No tmux sessions found"))))
@@ -451,16 +462,27 @@ Send the text after @ai to tmux and delete the line."
     (cond
      ;; Single line @ai
      ((looking-at "^@ai\\s-+\\(.+\\)$")
-      (let ((prompt (match-string 1))
-            (session (emacs-ai-agent-bridge-get-first-tmux-session))
-            (line-start (line-beginning-position))
-            (line-end (min (1+ (line-end-position)) (point-max))))
+      (let* ((prompt (match-string 1))
+             (session (emacs-ai-agent-bridge-get-first-tmux-session))
+             (line-start (line-beginning-position))
+             (line-end (min (1+ (line-end-position)) (point-max)))
+             ;; Get file path and current line number
+             (file-path (or (buffer-file-name) "untitled buffer"))
+             (current-line (line-number-at-pos))
+             ;; Create annotation
+             (annotation (format "This is from %s at line %d.\n\n" 
+                               (if (buffer-file-name)
+                                   (file-name-nondirectory file-path)
+                                 file-path)
+                               current-line))
+             ;; Prepend annotation to prompt
+             (annotated-prompt (concat annotation prompt)))
         (if session
             (progn
               ;; Animate line deletion over 1 second
               (emacs-ai-agent-bridge-animate-line-deletion line-start line-end)
-              ;; Send the prompt text
-              (emacs-ai-agent-bridge-send-to-tmux session prompt)
+              ;; Send the annotated prompt text
+              (emacs-ai-agent-bridge-send-to-tmux session annotated-prompt)
               ;; Send Enter key
               (emacs-ai-agent-bridge-send-key-to-tmux session "C-m")
               (message "✓ Sent to AI: %s" prompt)
@@ -490,9 +512,22 @@ Send the text after @ai to tmux and delete the line."
                             (push line lines)))
                         (forward-line 1))
                       ;; Join lines with newlines and send as one command
-                      (let ((full-text (mapconcat 'identity (nreverse lines) "\n")))
-                        ;; Send the text FIRST, then do animation
-                        (emacs-ai-agent-bridge-send-to-tmux session full-text)
+                      (let* ((full-text (mapconcat 'identity (nreverse lines) "\n"))
+                             ;; Get file path and line number of @ai-begin
+                             (file-path (or (buffer-file-name) "untitled buffer"))
+                             (begin-line (save-excursion
+                                          (goto-char begin-pos)
+                                          (line-number-at-pos)))
+                             ;; Create annotation
+                             (annotation (format "This is from %s at line %d.\n\n" 
+                                               (if (buffer-file-name)
+                                                   (file-name-nondirectory file-path)
+                                                 file-path)
+                                               begin-line))
+                             ;; Prepend annotation to text
+                             (annotated-text (concat annotation full-text)))
+                        ;; Send the annotated text FIRST, then do animation
+                        (emacs-ai-agent-bridge-send-to-tmux session annotated-text)
                         (emacs-ai-agent-bridge-send-key-to-tmux session "C-m")
                         ;; Animate the entire block deletion
                         (emacs-ai-agent-bridge-animate-line-deletion begin-pos end-pos)
