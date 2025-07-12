@@ -418,6 +418,30 @@ Returns (BEGIN-POS . END-POS) or nil if not in a block."
         (setq end-pos (min (1+ (line-end-position)) (point-max)))
         (cons begin-pos end-pos)))))
 
+(defun emacs-ai-agent-bridge-animate-line-deletion (start end)
+  "Animate deletion of text between START and END over 1 second."
+  (let* ((original-text (buffer-substring-no-properties start end))
+         (animation-frames '("⠋" "⠙" "⠹" "⠸" "⠼" "⠴" "⠦" "⠧" "⠇" "⠏"))
+         (num-frames (length animation-frames))
+         (delay 0.1))
+    (save-excursion
+      ;; Replace original text with spinner animation
+      (dotimes (i num-frames)
+        (goto-char start)
+        (delete-region start end)
+        (insert (format "%s Sending to AI..." (nth i animation-frames)))
+        (setq end (point))
+        (redisplay)
+        (sit-for delay))
+      ;; Final fade out effect
+      (goto-char start)
+      (delete-region start end)
+      (insert "✓ Sent!")
+      (redisplay)
+      (sit-for 0.3)
+      ;; Complete deletion
+      (delete-region start (point)))))
+
 (defun emacs-ai-agent-bridge-process-ai-line ()
   "Process current line if it starts with @ai.
 Send the text after @ai to tmux and delete the line."
@@ -428,17 +452,18 @@ Send the text after @ai to tmux and delete the line."
      ;; Single line @ai
      ((looking-at "^@ai\\s-+\\(.+\\)$")
       (let ((prompt (match-string 1))
-            (session (emacs-ai-agent-bridge-get-first-tmux-session)))
+            (session (emacs-ai-agent-bridge-get-first-tmux-session))
+            (line-start (line-beginning-position))
+            (line-end (min (1+ (line-end-position)) (point-max))))
         (if session
             (progn
+              ;; Animate line deletion over 1 second
+              (emacs-ai-agent-bridge-animate-line-deletion line-start line-end)
               ;; Send the prompt text
               (emacs-ai-agent-bridge-send-to-tmux session prompt)
               ;; Send Enter key
               (emacs-ai-agent-bridge-send-key-to-tmux session "C-m")
-              ;; Delete the @ai line
-              (delete-region (line-beginning-position) 
-                             (min (1+ (line-end-position)) (point-max)))
-              (message "Sent to AI: %s" prompt)
+              (message "✓ Sent to AI: %s" prompt)
               t)  ; Return t to indicate we processed the line
           (message "No tmux sessions found")
           nil)))
@@ -466,13 +491,12 @@ Send the text after @ai to tmux and delete the line."
                         (forward-line 1))
                       ;; Join lines with newlines and send as one command
                       (let ((full-text (mapconcat 'identity (nreverse lines) "\n")))
-                        ;; Send the entire text
+                        ;; Send the text FIRST, then do animation
                         (emacs-ai-agent-bridge-send-to-tmux session full-text)
-                        ;; Send Enter key to execute
-                        (emacs-ai-agent-bridge-send-key-to-tmux session "C-m")))
-                    ;; Delete the entire block
-                    (delete-region begin-pos end-pos)
-                    (message "Sent multi-line prompt to AI")
+                        (emacs-ai-agent-bridge-send-key-to-tmux session "C-m")
+                        ;; Animate the entire block deletion
+                        (emacs-ai-agent-bridge-animate-line-deletion begin-pos end-pos)
+                        (message "✓ Sent multi-line prompt to AI")))
                     t)
                 (message "No tmux sessions found")
                 nil))
