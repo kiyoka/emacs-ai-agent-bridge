@@ -44,11 +44,17 @@ To automatically start monitoring when Emacs starts:
 
 ;; Optional: Set up key binding for sending text
 (global-set-key (kbd "C-c a s") 'send-to-ai)
+
+;; Optional: Enable @ai input mode globally or for specific modes
+;; (emacs-ai-agent-bridge-input-mode 1)  ; Enable globally
+;; (add-hook 'text-mode-hook 'emacs-ai-agent-bridge-input-mode)  ; Enable for text modes
 ```
 
 ## Usage
 
 ### Send Text to AI Agent
+
+#### Method 1: Send Selected Region
 1. Select text region
 2. Execute:
    ```
@@ -58,6 +64,30 @@ To automatically start monitoring when Emacs starts:
    ```
    M-x emacs-ai-agent-bridge-send-region-to-tmux
    ```
+
+#### Method 2: Inline @ai Commands
+Enable the input mode first:
+```
+M-x emacs-ai-agent-bridge-input-mode
+```
+
+Then you can use @ai prefix for quick prompts:
+
+**Single line prompt:**
+```
+@ai What is the capital of France? [Enter]
+```
+The text after @ai will be sent to the AI agent and the line will be deleted.
+
+**Multi-line prompt:**
+```
+@ai-begin
+This is a multi-line prompt.
+You can write multiple lines here.
+Each line will be sent as part of the prompt.
+@ai-end [Enter on this line]
+```
+When you press Enter on the @ai-end line, the entire block (excluding @ai-begin and @ai-end markers) will be sent to the AI agent and the block will be deleted.
 
 ### Respond to AI Agent Prompts
 When the AI agent presents multiple choice options in the *ai* buffer, you can respond quickly using number keys:

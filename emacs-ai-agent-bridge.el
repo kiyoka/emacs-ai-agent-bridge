@@ -397,5 +397,116 @@ Otherwise, do nothing."
                    emacs-ai-agent-bridge--prompt-detected))
       (message "Buffer %s not found" emacs-ai-agent-bridge--ai-buffer-name))))
 
+(defun emacs-ai-agent-bridge-find-ai-block ()
+  "Find @ai-begin/@ai-end block boundaries.
+Returns (BEGIN-POS . END-POS) or nil if not in a block."
+  (save-excursion
+    (let ((end-pos nil)
+          (begin-pos nil)
+          (current-line-start (line-beginning-position)))
+      ;; Check if we're on @ai-end line
+      (beginning-of-line)
+      (when (looking-at "^@ai-end\\s-*$")
+        ;; Look backwards for @ai-begin
+        (save-excursion
+          (if (re-search-backward "^@ai-begin\\s-*$" nil t)
+              (setq begin-pos (line-beginning-position))
+            (error "No matching @ai-begin found")))
+        (setq end-pos (min (1+ (line-end-position)) (point-max)))
+        (cons begin-pos end-pos)))))
+
+(defun emacs-ai-agent-bridge-process-ai-line ()
+  "Process current line if it starts with @ai.
+Send the text after @ai to tmux and delete the line."
+  (interactive)
+  (save-excursion
+    (beginning-of-line)
+    (cond
+     ;; Single line @ai
+     ((looking-at "^@ai\\s-+\\(.+\\)$")
+      (let ((prompt (match-string 1))
+            (session (emacs-ai-agent-bridge-get-first-tmux-session)))
+        (if session
+            (progn
+              ;; Send the prompt text
+              (shell-command
+               (format "tmux send-keys -t %s %s"
+                       (shell-quote-argument session)
+                       (shell-quote-argument prompt)))
+              ;; Send Enter key
+              (shell-command
+               (format "tmux send-keys -t %s C-m"
+                       (shell-quote-argument session)))
+              ;; Delete the @ai line
+              (delete-region (line-beginning-position) 
+                             (min (1+ (line-end-position)) (point-max)))
+              (message "Sent to AI: %s" prompt)
+              t)  ; Return t to indicate we processed the line
+          (message "No tmux sessions found")
+          nil)))
+     ;; @ai-end (multi-line block)
+     ((looking-at "^@ai-end\\s-*$")
+      (let ((block-bounds (emacs-ai-agent-bridge-find-ai-block)))
+        (if block-bounds
+            (let* ((begin-pos (car block-bounds))
+                   (end-pos (cdr block-bounds))
+                   (session (emacs-ai-agent-bridge-get-first-tmux-session)))
+              (if session
+                  (save-excursion
+                    (goto-char begin-pos)
+                    ;; Skip @ai-begin line
+                    (forward-line 1)
+                    ;; Collect all lines into a single string
+                    (let ((lines '()))
+                      (while (< (point) end-pos)
+                        (beginning-of-line)
+                        (unless (looking-at "^@ai-end\\s-*$")
+                          (let ((line (buffer-substring-no-properties 
+                                       (line-beginning-position) 
+                                       (line-end-position))))
+                            (push line lines)))
+                        (forward-line 1))
+                      ;; Join lines with newlines and send as one command
+                      (let ((full-text (mapconcat 'identity (nreverse lines) "\n")))
+                        ;; Send the entire text
+                        (shell-command
+                         (format "tmux send-keys -t %s %s"
+                                 (shell-quote-argument session)
+                                 (shell-quote-argument full-text)))
+                        ;; Send Enter key to execute
+                        (shell-command
+                         (format "tmux send-keys -t %s C-m"
+                                 (shell-quote-argument session)))))
+                    ;; Delete the entire block
+                    (delete-region begin-pos end-pos)
+                    (message "Sent multi-line prompt to AI")
+                    t)
+                (message "No tmux sessions found")
+                nil))
+          (message "Not inside an @ai-begin/@ai-end block")
+          nil)))
+     ;; Not an @ai line
+     (t nil))))
+
+(defvar emacs-ai-agent-bridge-input-mode-map
+  (let ((map (make-sparse-keymap)))
+    (define-key map (kbd "C-m") 'emacs-ai-agent-bridge-smart-input-return)
+    map)
+  "Keymap for emacs-ai-agent-bridge-input-mode.")
+
+(defun emacs-ai-agent-bridge-smart-input-return ()
+  "Smart return key for buffers with @ai input support.
+If current line starts with @ai, process it. Otherwise, insert newline."
+  (interactive)
+  (if (emacs-ai-agent-bridge-process-ai-line)
+      nil  ; Line was processed, do nothing more
+    (newline)))  ; Normal newline
+
+(define-minor-mode emacs-ai-agent-bridge-input-mode
+  "Minor mode for @ai input support.
+When enabled, lines starting with @ai followed by Enter will be sent to AI."
+  :lighter " AI-Input"
+  :keymap emacs-ai-agent-bridge-input-mode-map)
+
 (provide 'emacs-ai-agent-bridge)
 ;;; emacs-ai-agent-bridge.el ends here
