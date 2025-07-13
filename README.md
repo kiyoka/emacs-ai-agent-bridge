@@ -49,6 +49,10 @@ To automatically start monitoring when Emacs starts:
 ;; Optional: Enable @ai input mode globally or for specific modes
 ;; (emacs-ai-agent-bridge-input-mode 1)  ; Enable globally
 ;; (add-hook 'text-mode-hook 'emacs-ai-agent-bridge-input-mode)  ; Enable for text modes
+
+;; Recommended: Enable auto-revert mode to automatically reload files
+;; modified by the AI agent
+(global-auto-revert-mode 1)  ; Automatically reload files when changed externally
 ```
 
 ## Usage

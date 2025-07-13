@@ -131,7 +131,11 @@ Common keys: C-m (Enter), Up, Down, etc."
   "Send the region between START and END to AI agent in tmux.
 This is an alias for `emacs-ai-agent-bridge-send-region-to-tmux'."
   (interactive "r")
-  (emacs-ai-agent-bridge-send-region-to-tmux start end))
+  (emacs-ai-agent-bridge-send-region-to-tmux start end)
+  ;; Save buffer if it has unsaved changes to ensure AI agent sees latest content
+  (when (and (buffer-modified-p)
+             (buffer-file-name))
+    (save-buffer)))
 
 (defun emacs-ai-agent-bridge-select-option (option-number)
   "Select an option from AI agent's choice prompt.
@@ -435,23 +439,19 @@ Returns (BEGIN-POS . END-POS) or nil if not in a block."
          (animation-frames '("⠋" "⠙" "⠹" "⠸" "⠼" "⠴" "⠦" "⠧" "⠇" "⠏"))
          (num-frames (length animation-frames))
          (delay 0.1))
-    (save-excursion
-      ;; Replace original text with spinner animation
-      (dotimes (i num-frames)
-        (goto-char start)
-        (delete-region start end)
-        (insert (format "%s Sending to AI..." (nth i animation-frames)))
-        (setq end (point))
-        (redisplay)
-        (sit-for delay))
-      ;; Final fade out effect
-      (goto-char start)
-      (delete-region start end)
-      (insert "✓ Sent!")
-      (redisplay)
-      (sit-for 0.3)
-      ;; Complete deletion
-      (delete-region start (point)))))
+    ;; Wrap animation in with-silent-modifications to prevent marking buffer as modified
+    (with-silent-modifications
+      (save-excursion
+        ;; Replace original text with spinner animation
+        (dotimes (i num-frames)
+          (goto-char start)
+          (delete-region start end)
+          (insert (format "%s Sending to AI..." (nth i animation-frames)))
+          (setq end (point))
+          (redisplay)
+          (sit-for delay))))
+    ;; Complete deletion - this marks buffer as modified properly
+    (delete-region start end)))
 
 (defun emacs-ai-agent-bridge-process-ai-line ()
   "Process current line if it starts with @ai.
@@ -551,7 +551,10 @@ Send the text after @ai to tmux and delete the line."
 If current line starts with @ai, process it. Otherwise, insert newline."
   (interactive)
   (if (emacs-ai-agent-bridge-process-ai-line)
-      nil  ; Line was processed, do nothing more
+      ;; Line was processed, save buffer if it has unsaved changes
+      (when (and (buffer-modified-p)
+                 (buffer-file-name))
+        (save-buffer))
     (newline)))  ; Normal newline
 
 (define-minor-mode emacs-ai-agent-bridge-input-mode
