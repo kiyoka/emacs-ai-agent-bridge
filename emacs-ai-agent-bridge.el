@@ -88,12 +88,15 @@ If nil, will use the first available session."
       (car (split-string output "\n" t)))))
 
 (defun emacs-ai-agent-bridge-send-to-tmux (session text)
-  "Send TEXT to tmux SESSION.
+  "Send TEXT to tmux SESSION line by line with 0.1 second delay.
 This is a helper function to avoid code duplication."
-  (shell-command
-   (format "tmux send-keys -t %s %s"
-           (shell-quote-argument session)
-           (shell-quote-argument text))))
+  (let ((lines (split-string text "\n" t)))
+    (dolist (line lines)
+      (shell-command
+       (format "tmux send-keys -t %s %s"
+               (shell-quote-argument session)
+               (shell-quote-argument line)))
+      (sit-for 0.1))))
 
 (defun emacs-ai-agent-bridge-send-key-to-tmux (session key)
   "Send KEY to tmux SESSION.
