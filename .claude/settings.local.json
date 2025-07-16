@@ -3,7 +3,10 @@
     "allow": [
       "Bash(ls:*)",
       "Bash(touch:*)",
-      "Bash(git add:*)"
+      "Bash(git add:*)",
+      "Bash(find:*)",
+      "Bash(gh issue list:*)",
+      "WebFetch(domain:github.com)"
     ],
     "deny": []
   }
