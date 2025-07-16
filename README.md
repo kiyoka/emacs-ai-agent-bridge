@@ -53,6 +53,9 @@ To automatically start monitoring when Emacs starts:
 ;; Recommended: Enable auto-revert mode to automatically reload files
 ;; modified by the AI agent
 (global-auto-revert-mode 1)  ; Automatically reload files when changed externally
+
+;; Note: In WSL environments, you may also need to add:
+;; (setq auto-revert-use-notify nil)
 ```
 
 ## Usage
