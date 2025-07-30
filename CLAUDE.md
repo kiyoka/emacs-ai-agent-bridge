@@ -49,6 +49,7 @@ The system detects when the AI agent is waiting for input by monitoring if the t
 ### 3. Text Sending
 - **Function**: `send-to-ai` - Sends selected region to tmux with automatic C-m (Enter key)
 - **Function**: `emacs-ai-agent-bridge-send-region-to-tmux` - Core implementation
+- **Function**: `emacs-ai-agent-bridge-send-block-to-ai` - Sends consecutive lines before cursor (bound to C-c <return>)
 - Text is sent to tmux followed by C-m to execute the command
 
 ### 4. Configuration Variables

@@ -140,6 +140,39 @@ This is an alias for `emacs-ai-agent-bridge-send-region-to-tmux'."
              (buffer-file-name))
     (save-buffer)))
 
+(defun emacs-ai-agent-bridge-get-consecutive-lines-block ()
+  "Get consecutive lines before cursor until blank line or beginning of buffer.
+Returns (START . END) of the block."
+  (save-excursion
+    (let ((end-pos (line-end-position))
+          (start-pos nil))
+      ;; Move to beginning of current line
+      (beginning-of-line)
+      ;; Keep moving backward while lines are non-empty
+      (while (and (not (bobp))
+                  (not (looking-at "^[[:space:]]*$")))
+        (forward-line -1))
+      ;; If we stopped at a blank line, move forward one line
+      (when (and (not (bobp))
+                 (looking-at "^[[:space:]]*$"))
+        (forward-line 1))
+      (setq start-pos (point))
+      (cons start-pos end-pos))))
+
+(defun emacs-ai-agent-bridge-send-block-to-ai ()
+  "Send consecutive lines before cursor to AI agent in tmux.
+Stops at blank line or beginning of buffer."
+  (interactive)
+  (let ((block-bounds (emacs-ai-agent-bridge-get-consecutive-lines-block)))
+    (when block-bounds
+      (let ((start (car block-bounds))
+            (end (cdr block-bounds)))
+        (emacs-ai-agent-bridge-send-region-to-tmux start end)
+        ;; Save buffer if it has unsaved changes
+        (when (and (buffer-modified-p)
+                   (buffer-file-name))
+          (save-buffer))))))
+
 (defun emacs-ai-agent-bridge-select-option (option-number)
   "Select an option from AI agent's choice prompt.
 OPTION-NUMBER should be 1, 2, 3, 4, or 5.
@@ -565,6 +598,9 @@ If current line starts with @ai, process it. Otherwise, insert newline."
 When enabled, lines starting with @ai followed by Enter will be sent to AI."
   :lighter " AI-Input"
   :keymap emacs-ai-agent-bridge-input-mode-map)
+
+;; Global keybinding for C-c <return>
+(global-set-key (kbd "C-c <return>") 'emacs-ai-agent-bridge-send-block-to-ai)
 
 (provide 'emacs-ai-agent-bridge)
 ;;; emacs-ai-agent-bridge.el ends here

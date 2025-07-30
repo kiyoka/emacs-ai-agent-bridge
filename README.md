@@ -73,7 +73,23 @@ To automatically start monitoring when Emacs starts:
    M-x emacs-ai-agent-bridge-send-region-to-tmux
    ```
 
-#### Method 2: Inline @ai Commands
+#### Method 2: Send Consecutive Lines Block (C-c <return>)
+Press `C-c <return>` (Control+C followed by Return) to send consecutive lines before the cursor to the AI agent. The function will:
+- Send all consecutive non-blank lines before the cursor
+- Stop at the first blank line or beginning of buffer
+- Include context information (file name and line number)
+
+Example:
+```
+First line of text
+Second line of text
+Third line of text  [cursor here]
+
+Previous paragraph (won't be sent)
+```
+Pressing `C-c <return>` with the cursor on the third line will send all three lines to the AI agent.
+
+#### Method 3: Inline @ai Commands
 Enable the input mode first:
 ```
 M-x emacs-ai-agent-bridge-input-mode
