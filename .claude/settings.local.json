@@ -6,7 +6,9 @@
       "Bash(git add:*)",
       "Bash(find:*)",
       "Bash(gh issue list:*)",
-      "WebFetch(domain:github.com)"
+      "WebFetch(domain:github.com)",
+      "Bash(git rev-parse:*)",
+      "Bash(emacs:*)"
     ],
     "deny": []
   }
