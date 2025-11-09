@@ -63,3 +63,19 @@ The system detects when the AI agent is waiting for input by monitoring if the t
 - `CLAUDE.md` - This documentation file
 - `README.md` - User-facing documentation
 - `LICENSE` - GPL v3 license
+
+## Issue #8 Fix
+
+### Problem
+After updating to Claude Code 2.0.31, the following issues occurred due to UI changes:
+- Numeric key selection (1, 2, 3, etc.) stopped working
+- Arrow key navigation was inverted (pressing up at the top would jump to the bottom, then cycle upward through options 3→2→1)
+
+### Fix
+Modified `emacs-ai-agent-bridge-select-option` function (emacs-ai-agent-bridge.el:176-186):
+- For Claude Code 2.0.31+, changed to send numeric keys directly to tmux
+- Previous implementation used a complex selection process with arrow keys and Enter, but the new version simplifies this by sending numeric keys directly
+
+**Related Functions**:
+- `emacs-ai-select-option-1` through `emacs-ai-select-option-5` - Directly select corresponding options
+- Pressing keys 1-5 in the *ai* buffer allows direct selection of Claude Code options

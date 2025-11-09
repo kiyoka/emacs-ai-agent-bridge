@@ -176,19 +176,12 @@ Stops at blank line or beginning of buffer."
 (defun emacs-ai-agent-bridge-select-option (option-number)
   "Select an option from AI agent's choice prompt.
 OPTION-NUMBER should be 1, 2, 3, 4, or 5.
-Moves cursor to top with 5 Up keys, then moves down as needed, then presses Enter."
+Sends the number key directly to select the option (Claude Code 2.0.31+)."
   (let ((session (emacs-ai-agent-bridge-get-first-tmux-session)))
     (if session
         (progn
-          ;; Send 5 Up arrow keys to move to the top
-          (dotimes (_ 5)
-            (emacs-ai-agent-bridge-send-key-to-tmux session "Up"))
-          ;; Send Down arrow keys based on option number
-          (when (> option-number 1)
-            (dotimes (_ (1- option-number))
-              (emacs-ai-agent-bridge-send-key-to-tmux session "Down")))
-          ;; Send Enter key (C-m)
-          (emacs-ai-agent-bridge-send-key-to-tmux session "C-m")
+          ;; Send the number key directly (Claude Code 2.0.31+ supports direct number selection)
+          (emacs-ai-agent-bridge-send-key-to-tmux session (number-to-string option-number))
           (message "Selected option %d" option-number))
       (message "No tmux sessions found"))))
 
