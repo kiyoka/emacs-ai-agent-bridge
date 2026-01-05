@@ -7,7 +7,8 @@
       "Bash(find:*)",
       "Bash(gh issue list:*)",
       "WebFetch(domain:github.com)",
-      "Bash(gh issue view:*)"
+      "Bash(git rev-parse:*)",
+      "Bash(emacs:*)"
     ],
     "deny": []
   }

@@ -106,19 +106,45 @@ Common keys: C-m (Enter), Up, Down, etc."
            (shell-quote-argument session)
            key)))
 
+(defun emacs-ai-agent-bridge-get-git-root ()
+  "Get the git repository root directory.
+Returns nil if not in a git repository."
+  (let ((default-directory (if (buffer-file-name)
+                               (file-name-directory (buffer-file-name))
+                             default-directory)))
+    (let ((git-root (shell-command-to-string "git rev-parse --show-toplevel 2>/dev/null")))
+      (when (and git-root (not (string-empty-p git-root)))
+        (string-trim git-root)))))
+
+(defun emacs-ai-agent-bridge-get-display-path ()
+  "Get the appropriate path to display for the current buffer.
+Returns git-relative path if in a git repository, buffer name if no file, or absolute path otherwise."
+  (if (buffer-file-name)
+      (let* ((file-path (buffer-file-name))
+             (file-dir (file-name-directory file-path)))
+        ;; Check if we're in a git repository by running git status
+        (if (= 0 (let ((default-directory file-dir))
+                   (call-process "git" nil nil nil "status" "--porcelain")))
+            ;; In git repo - calculate relative path from git root
+            (let ((git-prefix (let ((default-directory file-dir))
+                                (string-trim (shell-command-to-string "git rev-parse --show-prefix 2>/dev/null")))))
+              (concat git-prefix (file-name-nondirectory file-path)))
+          ;; Not in git repo - return just filename
+          (file-name-nondirectory file-path)))
+    ;; Return buffer name if no file associated
+    (buffer-name)))
+
 (defun emacs-ai-agent-bridge-send-region-to-tmux (start end)
   "Send the region between START and END to the first available tmux session."
   (interactive "r")
   (let* ((session (emacs-ai-agent-bridge-get-first-tmux-session))
          (text (buffer-substring-no-properties start end))
-         ;; Get file path and line number
-         (file-path (or (buffer-file-name) "untitled buffer"))
+         ;; Get display path and line number
+         (display-path (emacs-ai-agent-bridge-get-display-path))
          (line-number (line-number-at-pos start))
          ;; Create annotation in English
-         (annotation (format "This is from %s at line %d.\n\n" 
-                           (if (buffer-file-name)
-                               (file-name-nondirectory file-path)
-                             file-path)
+         (annotation (format "This is from %s at line %d.\n\n"
+                           display-path
                            line-number))
          ;; Prepend annotation to text
          (annotated-text (concat annotation text)))
@@ -495,14 +521,12 @@ Send the text after @ai to tmux and delete the line."
              (session (emacs-ai-agent-bridge-get-first-tmux-session))
              (line-start (line-beginning-position))
              (line-end (min (1+ (line-end-position)) (point-max)))
-             ;; Get file path and current line number
-             (file-path (or (buffer-file-name) "untitled buffer"))
+             ;; Get display path and current line number
+             (display-path (emacs-ai-agent-bridge-get-display-path))
              (current-line (line-number-at-pos))
              ;; Create annotation
-             (annotation (format "This is from %s at line %d.\n\n" 
-                               (if (buffer-file-name)
-                                   (file-name-nondirectory file-path)
-                                 file-path)
+             (annotation (format "This is from %s at line %d.\n\n"
+                               display-path
                                current-line))
              ;; Prepend annotation to prompt
              (annotated-prompt (concat annotation prompt)))
@@ -542,16 +566,14 @@ Send the text after @ai to tmux and delete the line."
                         (forward-line 1))
                       ;; Join lines with newlines and send as one command
                       (let* ((full-text (mapconcat 'identity (nreverse lines) "\n"))
-                             ;; Get file path and line number of @ai-begin
-                             (file-path (or (buffer-file-name) "untitled buffer"))
+                             ;; Get display path and line number of @ai-begin
+                             (display-path (emacs-ai-agent-bridge-get-display-path))
                              (begin-line (save-excursion
                                           (goto-char begin-pos)
                                           (line-number-at-pos)))
                              ;; Create annotation
-                             (annotation (format "This is from %s at line %d.\n\n" 
-                                               (if (buffer-file-name)
-                                                   (file-name-nondirectory file-path)
-                                                 file-path)
+                             (annotation (format "This is from %s at line %d.\n\n"
+                                               display-path
                                                begin-line))
                              ;; Prepend annotation to text
                              (annotated-text (concat annotation full-text)))
