@@ -2,8 +2,8 @@
 
 ;; Copyright (C) 2025
 
-;; Author: 
-;; Version: 0.1.0
+;; Author:
+;; Version: 0.2.0
 ;; Package-Requires: ((emacs "25.1"))
 ;; Keywords: tools, processes
 ;; URL: https://github.com/kiyoka/emacs-ai-agent-bridge
