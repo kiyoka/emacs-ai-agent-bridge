@@ -54,7 +54,8 @@
 ### 4. 設定変数
 - `emacs-ai-agent-bridge-tmux-session` - 監視するtmuxセッション（nilで自動検出）
 - `emacs-ai-agent-bridge-tmux-pane` - ペインID（デフォルト: "0"）
-- `emacs-ai-agent-bridge-monitor-interval` - チェック間隔（秒）（デフォルト: 5）
+- `emacs-ai-agent-bridge-monitor-interval` - チェック間隔（秒）（デフォルト: 2）
+- `emacs-ai-agent-bridge-scrollback-lines` - tmux履歴からキャプチャするスクロールバック行数（デフォルト: 3000）
 
 ## ファイル構造
 
@@ -79,3 +80,21 @@ Claude Code 2.0.31へのアップデート後、UIの変更により以下の問
 - `emacs-ai-select-option-1` から `emacs-ai-select-option-5` - それぞれ対応する選択肢を直接選択
 - *ai*バッファで1-5キーを押すことで、Claude Codeの選択肢を直接選択可能
 
+## Issue #11の実装内容
+
+### 機能リクエスト
+tmuxで画面外にスクロールしてしまった過去のメッセージを*ai*バッファに表示できるようにする。
+
+### 問題
+以前は、*ai*バッファはtmuxウィンドウに表示されている内容のみをキャプチャしていたため、画面外にスクロールアウトしたメッセージにアクセスできませんでした。ユーザーは過去の会話を包括的にレビューしたいと要望していました。
+
+### 実装内容
+`emacs-ai-agent-bridge-capture-tmux-pane`関数（emacs-ai-agent-bridge.el:269-283）を修正：
+- 新しい設定変数 `emacs-ai-agent-bridge-scrollback-lines` を追加（デフォルト: 3000）
+- `tmux capture-pane` コマンドにスクロールバック履歴用の `-S` オプションを追加
+- `emacs-ai-agent-bridge-scrollback-lines` が 0 より大きい場合、その行数分のスクロールバック履歴をキャプチャ
+- 0 に設定した場合、表示されているコンテンツのみをキャプチャ（以前の動作）
+
+**設定方法**:
+- `emacs-ai-agent-bridge-scrollback-lines` を設定することでスクロールバック行数をカスタマイズ可能
+- 例: `(setq emacs-ai-agent-bridge-scrollback-lines 5000)` で5000行の履歴をキャプチャ

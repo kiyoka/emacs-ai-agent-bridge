@@ -56,6 +56,7 @@ The system detects when the AI agent is waiting for input by monitoring if the t
 - `emacs-ai-agent-bridge-tmux-session` - tmux session to monitor (nil for auto-detect)
 - `emacs-ai-agent-bridge-tmux-pane` - Pane ID (default: "0")
 - `emacs-ai-agent-bridge-monitor-interval` - Check interval in seconds (default: 2)
+- `emacs-ai-agent-bridge-scrollback-lines` - Number of scrollback lines to capture from tmux history (default: 3000)
 
 ## File Structure
 
@@ -79,3 +80,22 @@ Modified `emacs-ai-agent-bridge-select-option` function (emacs-ai-agent-bridge.e
 **Related Functions**:
 - `emacs-ai-select-option-1` through `emacs-ai-select-option-5` - Directly select corresponding options
 - Pressing keys 1-5 in the *ai* buffer allows direct selection of Claude Code options
+
+## Issue #11 Implementation
+
+### Feature Request
+Display past messages that have scrolled off-screen in tmux within the *ai* buffer.
+
+### Problem
+Previously, the *ai* buffer only captured content visible in the tmux window, preventing access to messages that had scrolled off-screen. Users wanted to review past conversations comprehensively.
+
+### Implementation
+Modified `emacs-ai-agent-bridge-capture-tmux-pane` function (emacs-ai-agent-bridge.el:269-283):
+- Added new configuration variable `emacs-ai-agent-bridge-scrollback-lines` (default: 3000)
+- Enhanced `tmux capture-pane` command to include `-S` option for scrollback history
+- When `emacs-ai-agent-bridge-scrollback-lines` > 0, captures from that many lines back in the scrollback buffer
+- When set to 0, captures only visible content (previous behavior)
+
+**Configuration**:
+- Users can customize the number of scrollback lines by setting `emacs-ai-agent-bridge-scrollback-lines`
+- Example: `(setq emacs-ai-agent-bridge-scrollback-lines 5000)` to capture 5000 lines of history

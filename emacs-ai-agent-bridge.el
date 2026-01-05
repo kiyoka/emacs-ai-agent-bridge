@@ -56,6 +56,13 @@ If nil, will use the first available session."
   :type 'integer
   :group 'emacs-ai-agent-bridge)
 
+(defcustom emacs-ai-agent-bridge-scrollback-lines 3000
+  "Number of scrollback lines to capture from tmux history.
+A value of 0 captures only visible content.
+Negative values capture from that many lines back in the scrollback buffer."
+  :type 'integer
+  :group 'emacs-ai-agent-bridge)
+
 
 (defvar emacs-ai-agent-bridge--monitor-timer nil
   "Timer object for periodic monitoring.")
@@ -260,12 +267,17 @@ Otherwise, do nothing."
       (message "No prompt detected in *ai* buffer")))))
 
 (defun emacs-ai-agent-bridge-capture-tmux-pane ()
-  "Capture the current content of the configured tmux pane."
+  "Capture the current content of the configured tmux pane.
+Includes scrollback history based on `emacs-ai-agent-bridge-scrollback-lines'."
   (let* ((session (or emacs-ai-agent-bridge-tmux-session
                       (emacs-ai-agent-bridge-get-first-tmux-session)))
-         (cmd (format "tmux capture-pane -t %s:%s -p"
+         (scrollback-option (if (> emacs-ai-agent-bridge-scrollback-lines 0)
+                                (format " -S -%d" emacs-ai-agent-bridge-scrollback-lines)
+                              ""))
+         (cmd (format "tmux capture-pane -t %s:%s -p%s"
                       session
-                      emacs-ai-agent-bridge-tmux-pane)))
+                      emacs-ai-agent-bridge-tmux-pane
+                      scrollback-option)))
     (if session
         (shell-command-to-string cmd)
       (error "No tmux session available"))))
