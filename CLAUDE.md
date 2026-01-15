@@ -124,3 +124,29 @@ Modified `emacs-ai-agent-bridge-smart-input-return` function to be mode-independ
 - Works with any major mode without modification
 - Preserves all mode-specific RET key behaviors (table alignment, list continuation, etc.)
 - No dependencies on specific modes like markdown-mode or org-mode
+
+### Implementation Changes
+
+1. **New Helper Functions** (emacs-ai-agent-bridge.el:612-625):
+   - `emacs-ai-agent-bridge-get-original-return-command`: Retrieve the original RET key binding by temporarily disabling the minor mode
+   - `emacs-ai-agent-bridge-call-original-return`: Invoke the underlying mode's RET handler via `call-interactively`
+
+2. **Modified Function** (emacs-ai-agent-bridge.el:627-638):
+   - `emacs-ai-agent-bridge-smart-input-return`: Call `emacs-ai-agent-bridge-call-original-return` instead of simply calling `newline`
+
+3. **Documentation Updates**:
+   - Added Issue #12 fix details to CLAUDE.md
+   - Version bumped from 0.2.0 to 0.3.0
+
+### Verification
+
+- ✓ Original RET handlers are correctly invoked in text-mode, org-mode, and other modes
+- ✓ `org-return` is preserved in org-mode (list continuation and other features)
+- ✓ markdown-mode table auto-alignment works (due to mode-independence)
+- ✓ @ai line processing continues to work correctly
+
+### Technical Highlights
+
+- **Completely mode-independent**: Works with markdown-mode, org-mode, and any other mode without modifications
+- **Preserves mode-specific features**: Each mode's special RET key functionality is maintained
+- **High maintainability**: No changes needed when new modes are added
