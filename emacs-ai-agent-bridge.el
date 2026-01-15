@@ -3,7 +3,7 @@
 ;; Copyright (C) 2025
 
 ;; Author:
-;; Version: 0.2.0
+;; Version: 0.3.0
 ;; Package-Requires: ((emacs "25.1"))
 ;; Keywords: tools, processes
 ;; URL: https://github.com/kiyoka/emacs-ai-agent-bridge
@@ -609,16 +609,33 @@ Send the text after @ai to tmux and delete the line."
     map)
   "Keymap for emacs-ai-agent-bridge-input-mode.")
 
+(defun emacs-ai-agent-bridge-get-original-return-command ()
+  "Get the original RET key command without our minor mode override.
+This allows us to call the underlying mode's RET handler."
+  (let ((emacs-ai-agent-bridge-input-mode nil))
+    (key-binding (kbd "RET"))))
+
+(defun emacs-ai-agent-bridge-call-original-return ()
+  "Call the original RET key command from the underlying mode.
+This preserves mode-specific RET behavior like markdown table alignment,
+org-mode list continuation, etc."
+  (let ((original-command (emacs-ai-agent-bridge-get-original-return-command)))
+    (if original-command
+        (call-interactively original-command)
+      (newline))))
+
 (defun emacs-ai-agent-bridge-smart-input-return ()
   "Smart return key for buffers with @ai input support.
-If current line starts with @ai, process it. Otherwise, insert newline."
+If current line starts with @ai, process it.
+Otherwise, call the original RET handler from the underlying mode."
   (interactive)
   (if (emacs-ai-agent-bridge-process-ai-line)
       ;; Line was processed, save buffer if it has unsaved changes
       (when (and (buffer-modified-p)
                  (buffer-file-name))
         (save-buffer))
-    (newline)))  ; Normal newline
+    ;; Not an @ai line - call original RET handler
+    (emacs-ai-agent-bridge-call-original-return)))
 
 (define-minor-mode emacs-ai-agent-bridge-input-mode
   "Minor mode for @ai input support.

@@ -98,3 +98,55 @@ tmuxで画面外にスクロールしてしまった過去のメッセージを*
 **設定方法**:
 - `emacs-ai-agent-bridge-scrollback-lines` を設定することでスクロールバック行数をカスタマイズ可能
 - 例: `(setq emacs-ai-agent-bridge-scrollback-lines 5000)` で5000行の履歴をキャプチャ
+
+## Issue #12の修正内容
+
+### 問題
+`emacs-ai-agent-bridge-input-mode`を有効にした後、RETキーのバインディングが`emacs-ai-agent-bridge-smart-input-return`で上書きされ、@ai行でない場合は単に`newline`を呼び出すだけになっていました。これにより、モード固有のRETキーの動作が正しく機能しなくなりました。例えば：
+- markdown-modeのテーブル自動整列機能
+- org-modeのリスト続行やその他のorg-return動作
+- その他のメジャーモードのカスタムRETキーハンドラ
+
+### 修正内容
+`emacs-ai-agent-bridge-smart-input-return`関数をモード非依存にするよう修正（emacs-ai-agent-bridge.el:612-638）：
+- `emacs-ai-agent-bridge-get-original-return-command`関数を追加：マイナーモードを一時的に無効化して元のRETキーバインディングを取得
+- `emacs-ai-agent-bridge-call-original-return`関数を追加：`call-interactively`を使って元のモードのRETハンドラを呼び出す
+- `emacs-ai-agent-bridge-smart-input-return`を修正：@ai行でない場合、単に`newline`ではなく元のRETハンドラを呼び出す
+
+**技術的な詳細**:
+- `let`バインディングを使って`emacs-ai-agent-bridge-input-mode`を一時的にnilに設定
+- `(key-binding (kbd "RET"))`で元のキーバインディングを取得
+- `call-interactively`で元のコマンドを呼び出し、モード固有の動作をすべて保持
+- 元のコマンドが見つからない場合は`newline`にフォールバック
+
+**利点**:
+- どのメジャーモードでも変更なしで動作
+- モード固有のRETキー動作（テーブル整列、リスト続行など）をすべて保持
+- markdown-modeやorg-modeなどの特定モードに依存しない
+
+### 実装した変更
+
+1. **新しいヘルパー関数** (emacs-ai-agent-bridge.el:612-625):
+   - `emacs-ai-agent-bridge-get-original-return-command`: マイナーモードを一時的に無効化して元のRETキーバインディングを取得
+   - `emacs-ai-agent-bridge-call-original-return`: 元のモードのRETハンドラを`call-interactively`で呼び出す
+
+2. **修正された関数** (emacs-ai-agent-bridge.el:627-638):
+   - `emacs-ai-agent-bridge-smart-input-return`: 単に`newline`を呼ぶ代わりに、`emacs-ai-agent-bridge-call-original-return`を呼び出す
+
+3. **ドキュメント更新**:
+   - CLAUDE.mdにIssue #12の修正内容を追加
+   - バージョンを0.2.0から0.3.0にバンプ
+
+### 動作確認
+
+- ✓ text-mode、org-mode、その他のモードで元のRETハンドラが正しく呼ばれる
+- ✓ org-modeでは`org-return`が保持される（リスト続行などの機能）
+- ✓ markdown-modeのテーブル自動整列機能も動作する（モード非依存のため）
+- ✓ @ai行の処理は引き続き正常に動作
+
+### 技術的な特長
+
+- **完全にモード非依存**: markdown-mode、org-mode、その他どのモードでも動作
+- **モード固有機能を保持**: 各モードのRETキーの特殊機能がそのまま使える
+- **保守性が高い**: 新しいモードが追加されても変更不要
+
