@@ -99,3 +99,54 @@ Modified `emacs-ai-agent-bridge-capture-tmux-pane` function (emacs-ai-agent-brid
 **Configuration**:
 - Users can customize the number of scrollback lines by setting `emacs-ai-agent-bridge-scrollback-lines`
 - Example: `(setq emacs-ai-agent-bridge-scrollback-lines 5000)` to capture 5000 lines of history
+
+## Issue #12 Fix
+
+### Problem
+After enabling `emacs-ai-agent-bridge-input-mode`, the RET key binding was overridden to call `emacs-ai-agent-bridge-smart-input-return`, which only called `newline` for non-@ai lines. This prevented mode-specific RET key behaviors from working correctly, such as:
+- markdown-mode's automatic table alignment feature
+- org-mode's list continuation and other org-return behaviors
+- Other major modes' custom RET key handlers
+
+### Fix
+Modified `emacs-ai-agent-bridge-smart-input-return` function to be mode-independent (emacs-ai-agent-bridge.el:612-638):
+- Added `emacs-ai-agent-bridge-get-original-return-command` function to retrieve the original RET key binding by temporarily disabling the minor mode
+- Added `emacs-ai-agent-bridge-call-original-return` function to call the underlying mode's RET handler via `call-interactively`
+- Modified `emacs-ai-agent-bridge-smart-input-return` to call the original RET handler instead of just `newline` when not processing @ai lines
+
+**Technical Details**:
+- Uses `let` binding to temporarily set `emacs-ai-agent-bridge-input-mode` to nil
+- Retrieves the original key binding with `(key-binding (kbd "RET"))`
+- Calls the original command with `call-interactively` to preserve all mode-specific behavior
+- Falls back to `newline` if no original command is found
+
+**Benefits**:
+- Works with any major mode without modification
+- Preserves all mode-specific RET key behaviors (table alignment, list continuation, etc.)
+- No dependencies on specific modes like markdown-mode or org-mode
+
+### Implementation Changes
+
+1. **New Helper Functions** (emacs-ai-agent-bridge.el:612-625):
+   - `emacs-ai-agent-bridge-get-original-return-command`: Retrieve the original RET key binding by temporarily disabling the minor mode
+   - `emacs-ai-agent-bridge-call-original-return`: Invoke the underlying mode's RET handler via `call-interactively`
+
+2. **Modified Function** (emacs-ai-agent-bridge.el:627-638):
+   - `emacs-ai-agent-bridge-smart-input-return`: Call `emacs-ai-agent-bridge-call-original-return` instead of simply calling `newline`
+
+3. **Documentation Updates**:
+   - Added Issue #12 fix details to CLAUDE.md
+   - Version bumped from 0.2.0 to 0.3.0
+
+### Verification
+
+- ✓ Original RET handlers are correctly invoked in text-mode, org-mode, and other modes
+- ✓ `org-return` is preserved in org-mode (list continuation and other features)
+- ✓ markdown-mode table auto-alignment works (due to mode-independence)
+- ✓ @ai line processing continues to work correctly
+
+### Technical Highlights
+
+- **Completely mode-independent**: Works with markdown-mode, org-mode, and any other mode without modifications
+- **Preserves mode-specific features**: Each mode's special RET key functionality is maintained
+- **High maintainability**: No changes needed when new modes are added
