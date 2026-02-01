@@ -446,7 +446,10 @@ Includes scrollback history based on `emacs-ai-agent-bridge-scrollback-lines'."
       ;; Force override C-m binding after setting read-only
       (local-set-key (kbd "C-m") 'emacs-ai-agent-bridge-smart-return)
       ;; Ensure buffer has no file association (like *scratch*)
-      (setq buffer-file-name nil))
+      (setq buffer-file-name nil)
+      ;; Add session display to mode-line via mode-line-misc-info
+      (setq-local mode-line-misc-info
+                  (list emacs-ai-agent-bridge-ai-buffer-mode-line-format)))
     ;; Only display buffer if it's not already visible
     (unless window
       (emacs-ai-agent-bridge-display-ai-buffer buffer))
@@ -671,6 +674,16 @@ Send the text after @ai to tmux and delete the line."
                   'help-echo "Click to switch tmux session"
                   'keymap emacs-ai-agent-bridge-mode-line-map)))
   "Mode-line format for tmux session display.")
+
+(defvar emacs-ai-agent-bridge-ai-buffer-mode-line-format
+  '(:eval
+    (when emacs-ai-agent-bridge-tmux-session
+      (propertize (format "[tmux:%s]" emacs-ai-agent-bridge-tmux-session)
+                  'face 'font-lock-constant-face
+                  'mouse-face 'mode-line-highlight
+                  'help-echo "Click to switch tmux session"
+                  'keymap emacs-ai-agent-bridge-mode-line-map)))
+  "Mode-line format for tmux session display in *ai* buffer.")
 
 (defun emacs-ai-agent-bridge-get-original-return-command ()
   "Get the original RET key command without our minor mode override.

@@ -190,6 +190,7 @@ Select tmux session (current: 0): [1, 2, claude, dev]
 - Clicking on the session name opens a popup menu with all available sessions
 - Session display is automatically added when `emacs-ai-agent-bridge-input-mode` is enabled
 - Uses `global-mode-string` for display (typically appears on the right side of the mode-line)
+- Also displayed in `*ai*` buffer mode-line for easy access
 
 **Dependencies**:
 - Requires `popup` package (version 0.5.3 or later)
