@@ -180,3 +180,17 @@ Added functions to list and switch between tmux sessions (emacs-ai-agent-bridge.
 M-x emacs-ai-agent-bridge-select-session
 Select tmux session (current: 0): [1, 2, claude, dev]
 ```
+
+### Mode-line Integration
+
+**Added Function**: `emacs-ai-agent-bridge-popup-select-session` - Popup-based session selection using popup-el
+
+**Mode-line Display**:
+- Current tmux session is displayed in the mode-line as `[tmux:0]`
+- Clicking on the session name opens a popup menu with all available sessions
+- Session display is automatically added when `emacs-ai-agent-bridge-input-mode` is enabled
+- Uses `global-mode-string` for display (typically appears on the right side of the mode-line)
+
+**Dependencies**:
+- Requires `popup` package (version 0.5.3 or later)
+- Added to Package-Requires for automatic installation

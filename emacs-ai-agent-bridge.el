@@ -4,7 +4,7 @@
 
 ;; Author:
 ;; Version: 0.4.0
-;; Package-Requires: ((emacs "25.1"))
+;; Package-Requires: ((emacs "25.1") (popup "0.5.3"))
 ;; Keywords: tools, processes
 ;; URL: https://github.com/kiyoka/emacs-ai-agent-bridge
 
@@ -33,6 +33,7 @@
 ;;; Code:
 
 (require 'cl-lib)
+(require 'popup)
 
 (defgroup emacs-ai-agent-bridge nil
   "Bridge between Emacs and AI agents in tmux."
@@ -119,6 +120,22 @@ Sorts session names using natural sort order (0, 1, 2, ..., then alphabetically)
         (emacs-ai-agent-bridge-stop-monitoring)
         (emacs-ai-agent-bridge-start-monitoring))
       (message "Switched to tmux session: %s" selected))))
+
+(defun emacs-ai-agent-bridge-popup-select-session ()
+  "Select a tmux session using popup menu and switch to it."
+  (interactive)
+  (let* ((sessions (emacs-ai-agent-bridge-get-all-tmux-sessions))
+         (current-session (or emacs-ai-agent-bridge-tmux-session
+                             (emacs-ai-agent-bridge-get-first-tmux-session))))
+    (when sessions
+      (let ((selected (popup-menu* sessions)))
+        (when selected
+          (setq emacs-ai-agent-bridge-tmux-session selected)
+          ;; モニタリング中であれば再起動
+          (when emacs-ai-agent-bridge--monitor-timer
+            (emacs-ai-agent-bridge-stop-monitoring)
+            (emacs-ai-agent-bridge-start-monitoring))
+          (message "Switched to tmux session: %s" selected))))))
 
 (defun emacs-ai-agent-bridge-send-to-tmux (session text)
   "Send TEXT to tmux SESSION line by line with 0.1 second delay.
@@ -638,6 +655,23 @@ Send the text after @ai to tmux and delete the line."
     map)
   "Keymap for emacs-ai-agent-bridge-input-mode.")
 
+(defvar emacs-ai-agent-bridge-mode-line-map
+  (let ((map (make-sparse-keymap)))
+    (define-key map [mode-line mouse-1] 'emacs-ai-agent-bridge-popup-select-session)
+    map)
+  "Keymap for mode-line session display.")
+
+(defvar emacs-ai-agent-bridge-mode-line-format
+  '(:eval
+    (when (and emacs-ai-agent-bridge-input-mode
+               emacs-ai-agent-bridge-tmux-session)
+      (propertize (format "[tmux:%s]" emacs-ai-agent-bridge-tmux-session)
+                  'face 'font-lock-constant-face
+                  'mouse-face 'mode-line-highlight
+                  'help-echo "Click to switch tmux session"
+                  'keymap emacs-ai-agent-bridge-mode-line-map)))
+  "Mode-line format for tmux session display.")
+
 (defun emacs-ai-agent-bridge-get-original-return-command ()
   "Get the original RET key command without our minor mode override.
 This allows us to call the underlying mode's RET handler."
@@ -669,8 +703,19 @@ Otherwise, call the original RET handler from the underlying mode."
 (define-minor-mode emacs-ai-agent-bridge-input-mode
   "Minor mode for @ai input support.
 When enabled, lines starting with @ai followed by Enter will be sent to AI."
-  :lighter " AI-Input"
-  :keymap emacs-ai-agent-bridge-input-mode-map)
+  :lighter " Agent-Bridge"
+  :keymap emacs-ai-agent-bridge-input-mode-map
+  (if emacs-ai-agent-bridge-input-mode
+      ;; Mode enabled: add to global-mode-string
+      (progn
+        (unless global-mode-string
+          (setq global-mode-string '("")))
+        (unless (member emacs-ai-agent-bridge-mode-line-format global-mode-string)
+          (setq global-mode-string
+                (append global-mode-string (list emacs-ai-agent-bridge-mode-line-format)))))
+    ;; Mode disabled: remove from global-mode-string
+    (setq global-mode-string
+          (remove emacs-ai-agent-bridge-mode-line-format global-mode-string))))
 
 ;; Global keybinding for C-c <return>
 (global-set-key (kbd "C-c <return>") 'emacs-ai-agent-bridge-send-block-to-ai)
