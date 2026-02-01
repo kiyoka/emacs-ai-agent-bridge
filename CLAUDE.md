@@ -150,3 +150,33 @@ Modified `emacs-ai-agent-bridge-smart-input-return` function to be mode-independ
 - **Completely mode-independent**: Works with markdown-mode, org-mode, and any other mode without modifications
 - **Preserves mode-specific features**: Each mode's special RET key functionality is maintained
 - **High maintainability**: No changes needed when new modes are added
+
+## Issue #14 Implementation
+
+### Feature Request
+Support multiple tmux sessions and allow users to switch between them.
+
+### Problem
+The current implementation only supports monitoring a single tmux session. When multiple sessions are running, users cannot easily switch between them.
+
+### Implementation
+Added functions to list and switch between tmux sessions (emacs-ai-agent-bridge.el:97-120):
+
+1. **New Function**: `emacs-ai-agent-bridge-get-all-tmux-sessions` - Returns a list of all available tmux sessions
+2. **New Function**: `emacs-ai-agent-bridge-select-session` - Interactive command to select and switch to a different tmux session
+
+**Behavior**:
+- On Emacs startup, the first session (lowest number) is automatically selected
+- Users can manually switch sessions using `M-x emacs-ai-agent-bridge-select-session`
+- When switching sessions, monitoring is automatically restarted for the new session
+- The `completing-read` interface shows the current session and allows selection from all available sessions
+
+**Configuration**:
+- The `emacs-ai-agent-bridge-tmux-session` variable stores the currently selected session
+- Set to nil for automatic detection (uses first available session)
+
+**Usage Example**:
+```
+M-x emacs-ai-agent-bridge-select-session
+Select tmux session (current: 0): [1, 2, claude, dev]
+```

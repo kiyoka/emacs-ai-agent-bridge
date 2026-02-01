@@ -3,7 +3,7 @@
 ;; Copyright (C) 2025
 
 ;; Author:
-;; Version: 0.3.0
+;; Version: 0.4.0
 ;; Package-Requires: ((emacs "25.1"))
 ;; Keywords: tools, processes
 ;; URL: https://github.com/kiyoka/emacs-ai-agent-bridge
@@ -88,11 +88,37 @@ Negative values capture from that many lines back in the scrollback buffer."
   "Keymap for *ai* buffer.")
 
 (defun emacs-ai-agent-bridge-get-first-tmux-session ()
-  "Get the name of the first available tmux session."
+  "Get the name of the first available tmux session.
+Sorts session names using natural sort order (0, 1, 2, ..., then alphabetically)."
+  (let ((output (shell-command-to-string "tmux list-sessions -F '#{session_name}' 2>/dev/null | sort -V | head -1")))
+    (if (string-empty-p output)
+        nil
+      (string-trim output))))
+
+(defun emacs-ai-agent-bridge-get-all-tmux-sessions ()
+  "Get a list of all available tmux sessions."
   (let ((output (shell-command-to-string "tmux list-sessions -F '#{session_name}' 2>/dev/null")))
     (if (string-empty-p output)
         nil
-      (car (split-string output "\n" t)))))
+      (split-string output "\n" t))))
+
+(defun emacs-ai-agent-bridge-select-session ()
+  "Select a tmux session from available sessions and switch to it."
+  (interactive)
+  (let* ((sessions (emacs-ai-agent-bridge-get-all-tmux-sessions))
+         (current-session (or emacs-ai-agent-bridge-tmux-session
+                             (emacs-ai-agent-bridge-get-first-tmux-session)))
+         (selected (completing-read
+                    (format "Select tmux session (current: %s): " current-session)
+                    sessions
+                    nil t)))
+    (when selected
+      (setq emacs-ai-agent-bridge-tmux-session selected)
+      ;; モニタリング中であれば再起動
+      (when emacs-ai-agent-bridge--monitor-timer
+        (emacs-ai-agent-bridge-stop-monitoring)
+        (emacs-ai-agent-bridge-start-monitoring))
+      (message "Switched to tmux session: %s" selected))))
 
 (defun emacs-ai-agent-bridge-send-to-tmux (session text)
   "Send TEXT to tmux SESSION line by line with 0.1 second delay.
@@ -437,13 +463,16 @@ Includes scrollback history based on `emacs-ai-agent-bridge-scrollback-lines'."
     (cancel-timer emacs-ai-agent-bridge--monitor-timer))
   (setq emacs-ai-agent-bridge--last-capture nil)  ; Reset last capture
   (setq emacs-ai-agent-bridge--prompt-detected nil)  ; Reset detection flag
+  ;; Fix session if not already set
+  (unless emacs-ai-agent-bridge-tmux-session
+    (setq emacs-ai-agent-bridge-tmux-session
+          (emacs-ai-agent-bridge-get-first-tmux-session)))
   (setq emacs-ai-agent-bridge--monitor-timer
-        (run-with-timer 0 emacs-ai-agent-bridge-monitor-interval 
+        (run-with-timer 0 emacs-ai-agent-bridge-monitor-interval
                         #'emacs-ai-agent-bridge-monitor-tmux))
-  (let ((session (or emacs-ai-agent-bridge-tmux-session
-                     (emacs-ai-agent-bridge-get-first-tmux-session))))
-    (message "Started monitoring tmux session %s, pane %s"
-             session emacs-ai-agent-bridge-tmux-pane)))
+  (message "Started monitoring tmux session %s, pane %s"
+           emacs-ai-agent-bridge-tmux-session
+           emacs-ai-agent-bridge-tmux-pane))
 
 (defun emacs-ai-agent-bridge-stop-monitoring ()
   "Stop monitoring the tmux console."
