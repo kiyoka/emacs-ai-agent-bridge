@@ -60,6 +60,33 @@ To automatically start monitoring when Emacs starts:
 
 ## Usage
 
+### Preparation: Starting tmux and AI Agent
+
+Before using this extension, you need to have an AI agent running inside tmux.
+
+1. **Start a tmux session**:
+   ```bash
+   tmux
+   ```
+   Or start with a specific session name:
+   ```bash
+   tmux new -s claude
+   ```
+
+2. **Launch the AI agent inside tmux**:
+   ```bash
+   claude
+   ```
+   Or launch any other AI coding agent.
+
+3. **Start Emacs**: Launch Emacs in a separate terminal (or another tmux pane).
+
+4. **If you have multiple tmux sessions**:
+   - Use `M-x emacs-ai-agent-bridge-select-session` to switch sessions
+   - Or click on the `[tmux:0]` indicator in the mode-line to select from a popup menu
+
+**Note**: Emacs will automatically monitor the first tmux session it finds. If you want to monitor a specific session, set `emacs-ai-agent-bridge-tmux-session` in your configuration.
+
 ### Send Text to AI Agent
 
 #### Method 1: Send Selected Region
