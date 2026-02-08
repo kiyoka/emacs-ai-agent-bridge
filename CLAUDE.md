@@ -195,3 +195,37 @@ Select tmux session (current: 0): [1, 2, claude, dev]
 **Dependencies**:
 - Requires `popup` package (version 0.5.3 or later)
 - Added to Package-Requires for automatic installation
+
+## Issue #15 Fix
+
+### Problem
+After implementing multiple tmux session support (Issue #14), switching sessions via the popup menu worked correctly (the Emacs Lisp side recognized the selected session), but text was still being sent to the wrong session.
+
+### Root Cause
+The following functions were always using `emacs-ai-agent-bridge-get-first-tmux-session` instead of respecting the user's selected session stored in `emacs-ai-agent-bridge-tmux-session`:
+1. `emacs-ai-agent-bridge-send-region-to-tmux` (line 190)
+2. `emacs-ai-agent-bridge-select-option` (line 256)
+3. `emacs-ai-agent-bridge-smart-return` (line 296)
+4. `emacs-ai-agent-bridge-process-ai-line` (lines 582 and 612)
+
+These functions ignored the selected session and always sent commands to the first tmux session.
+
+### Fix
+Modified all text-sending functions to use the same pattern as `emacs-ai-agent-bridge-capture-tmux-pane`:
+```elisp
+(session (or emacs-ai-agent-bridge-tmux-session
+             (emacs-ai-agent-bridge-get-first-tmux-session)))
+```
+
+This ensures the selected session is used first, and only falls back to the first session if no session has been explicitly selected.
+
+**Modified Functions**:
+1. `emacs-ai-agent-bridge-send-region-to-tmux` - Now respects selected session when sending regions
+2. `emacs-ai-agent-bridge-select-option` - Now respects selected session when selecting numbered options
+3. `emacs-ai-agent-bridge-smart-return` - Now respects selected session when pressing Enter in *ai* buffer
+4. `emacs-ai-agent-bridge-process-ai-line` - Now respects selected session for both single-line and multi-line @ai commands
+
+**Verification**:
+- ✓ Switching sessions via popup menu now correctly routes all commands to the selected session
+- ✓ Text sending, option selection, and @ai commands all use the correct session
+- ✓ Auto-detection still works when no session is explicitly selected
