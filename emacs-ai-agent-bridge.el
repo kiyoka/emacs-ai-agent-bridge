@@ -3,7 +3,7 @@
 ;; Copyright (C) 2025
 
 ;; Author:
-;; Version: 0.4.0
+;; Version: 0.5.0
 ;; Package-Requires: ((emacs "25.1") (popup "0.5.3"))
 ;; Keywords: tools, processes
 ;; URL: https://github.com/kiyoka/emacs-ai-agent-bridge
@@ -187,7 +187,8 @@ Returns git-relative path if in a git repository, buffer name if no file, or abs
 (defun emacs-ai-agent-bridge-send-region-to-tmux (start end)
   "Send the region between START and END to the first available tmux session."
   (interactive "r")
-  (let* ((session (emacs-ai-agent-bridge-get-first-tmux-session))
+  (let* ((session (or emacs-ai-agent-bridge-tmux-session
+                      (emacs-ai-agent-bridge-get-first-tmux-session)))
          (text (buffer-substring-no-properties start end))
          ;; Get display path and line number
          (display-path (emacs-ai-agent-bridge-get-display-path))
@@ -253,7 +254,8 @@ Stops at blank line or beginning of buffer."
   "Select an option from AI agent's choice prompt.
 OPTION-NUMBER should be 1, 2, 3, 4, or 5.
 Sends the number key directly to select the option (Claude Code 2.0.31+)."
-  (let ((session (emacs-ai-agent-bridge-get-first-tmux-session)))
+  (let ((session (or emacs-ai-agent-bridge-tmux-session
+                     (emacs-ai-agent-bridge-get-first-tmux-session))))
     (if session
         (progn
           ;; Send the number key directly (Claude Code 2.0.31+ supports direct number selection)
@@ -293,7 +295,8 @@ If it's a text input prompt, send Enter to tmux.
 Otherwise, do nothing."
   (interactive)
   (let ((content (buffer-string))
-        (session (emacs-ai-agent-bridge-get-first-tmux-session)))
+        (session (or emacs-ai-agent-bridge-tmux-session
+                     (emacs-ai-agent-bridge-get-first-tmux-session))))
     (cond
      ;; Choice prompt - select option 1
      ((emacs-ai-agent-bridge-is-choice-prompt-p content)
@@ -579,7 +582,8 @@ Send the text after @ai to tmux and delete the line."
      ;; Single line @ai
      ((looking-at "^@ai\\s-+\\(.+\\)$")
       (let* ((prompt (match-string 1))
-             (session (emacs-ai-agent-bridge-get-first-tmux-session))
+             (session (or emacs-ai-agent-bridge-tmux-session
+                          (emacs-ai-agent-bridge-get-first-tmux-session)))
              (line-start (line-beginning-position))
              (line-end (min (1+ (line-end-position)) (point-max)))
              ;; Get display path and current line number
@@ -609,7 +613,8 @@ Send the text after @ai to tmux and delete the line."
         (if block-bounds
             (let* ((begin-pos (car block-bounds))
                    (end-pos (cdr block-bounds))
-                   (session (emacs-ai-agent-bridge-get-first-tmux-session)))
+                   (session (or emacs-ai-agent-bridge-tmux-session
+                                (emacs-ai-agent-bridge-get-first-tmux-session))))
               (if session
                   (save-excursion
                     (goto-char begin-pos)

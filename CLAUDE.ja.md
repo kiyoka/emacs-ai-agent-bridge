@@ -194,3 +194,37 @@ Select tmux session (current: 0): [1, 2, claude, dev]
 **依存関係**:
 - `popup`パッケージ（バージョン0.5.3以降）が必要
 - Package-Requiresに追加され、自動インストール対応
+
+## Issue #15の修正内容
+
+### 問題
+複数のtmuxセッション対応（Issue #14）を実装した後、ポップアップメニューからのセッション切り替えは正常に動作していました（Emacs Lisp側は選択されたセッションを正しく認識）が、テキストは依然として間違ったセッションに送信されていました。
+
+### 根本原因
+以下の関数は、`emacs-ai-agent-bridge-tmux-session`に保存されたユーザーが選択したセッションを尊重せず、常に`emacs-ai-agent-bridge-get-first-tmux-session`を使用していました：
+1. `emacs-ai-agent-bridge-send-region-to-tmux`（190行目）
+2. `emacs-ai-agent-bridge-select-option`（256行目）
+3. `emacs-ai-agent-bridge-smart-return`（296行目）
+4. `emacs-ai-agent-bridge-process-ai-line`（582行目と612行目）
+
+これらの関数は選択されたセッションを無視し、常に最初のtmuxセッションにコマンドを送信していました。
+
+### 修正内容
+すべてのテキスト送信関数を`emacs-ai-agent-bridge-capture-tmux-pane`と同じパターンに修正：
+```elisp
+(session (or emacs-ai-agent-bridge-tmux-session
+             (emacs-ai-agent-bridge-get-first-tmux-session)))
+```
+
+これにより、選択されたセッションが優先的に使用され、明示的にセッションが選択されていない場合のみ最初のセッションにフォールバックするようになりました。
+
+**修正された関数**:
+1. `emacs-ai-agent-bridge-send-region-to-tmux` - リージョン送信時に選択されたセッションを尊重
+2. `emacs-ai-agent-bridge-select-option` - 数字による選択肢選択時に選択されたセッションを尊重
+3. `emacs-ai-agent-bridge-smart-return` - *ai*バッファでEnter押下時に選択されたセッションを尊重
+4. `emacs-ai-agent-bridge-process-ai-line` - 単行および複数行の@aiコマンドで選択されたセッションを尊重
+
+**動作確認**:
+- ✓ ポップアップメニューからのセッション切り替え後、すべてのコマンドが選択されたセッションに正しくルーティングされる
+- ✓ テキスト送信、選択肢選択、@aiコマンドがすべて正しいセッションを使用
+- ✓ セッションが明示的に選択されていない場合の自動検出も正常に動作
