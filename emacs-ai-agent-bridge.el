@@ -122,13 +122,22 @@ Sorts session names using natural sort order (0, 1, 2, ..., then alphabetically)
       (message "Switched to tmux session: %s" selected))))
 
 (defun emacs-ai-agent-bridge-popup-select-session ()
-  "Select a tmux session using popup menu and switch to it."
+  "Select a tmux session using popup menu and switch to it.
+When called from a mode-line click, the popup appears at the click position."
   (interactive)
   (let* ((sessions (emacs-ai-agent-bridge-get-all-tmux-sessions))
          (current-session (or emacs-ai-agent-bridge-tmux-session
                              (emacs-ai-agent-bridge-get-first-tmux-session))))
     (when sessions
-      (let ((selected (popup-menu* sessions)))
+      ;; マウスイベントから呼ばれた場合はクリック位置にポップアップを表示
+      (let* ((event (if (and (boundp 'last-input-event)
+                             (mouse-event-p last-input-event))
+                        last-input-event
+                      t))
+             (menu (list "Select tmux session"
+                         (cons "Sessions"
+                               (mapcar (lambda (s) (cons s s)) sessions))))
+             (selected (x-popup-menu event menu)))
         (when selected
           (setq emacs-ai-agent-bridge-tmux-session selected)
           ;; モニタリング中であれば再起動
