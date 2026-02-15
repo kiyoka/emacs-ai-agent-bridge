@@ -183,7 +183,7 @@ Select tmux session (current: 0): [1, 2, claude, dev]
 
 ### Mode-line Integration
 
-**Added Function**: `emacs-ai-agent-bridge-popup-select-session` - Popup-based session selection using popup-el
+**Added Function**: `emacs-ai-agent-bridge-popup-select-session` - Popup-based session selection using Emacs built-in `x-popup-menu`
 
 **Mode-line Display**:
 - Current tmux session is displayed in the mode-line as `[tmux:0]`
@@ -192,9 +192,11 @@ Select tmux session (current: 0): [1, 2, claude, dev]
 - Uses `global-mode-string` for display (typically appears on the right side of the mode-line)
 - Also displayed in `*ai*` buffer mode-line for easy access
 
-**Dependencies**:
-- Requires `popup` package (version 0.5.3 or later)
-- Added to Package-Requires for automatic installation
+**Popup Menu Behavior**:
+- Uses Emacs built-in `x-popup-menu` function instead of popup.el
+- Popup menu appears at the mouse click position on the mode-line
+- Minimizes eye movement by displaying the menu near where the user clicked
+- No external dependencies required (popup.el dependency removed)
 
 ## Issue #15 Fix
 

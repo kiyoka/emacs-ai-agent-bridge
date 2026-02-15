@@ -182,7 +182,7 @@ Select tmux session (current: 0): [1, 2, claude, dev]
 
 ### モードライン統合
 
-**追加関数**: `emacs-ai-agent-bridge-popup-select-session` - popup-elを使用したポップアップベースのセッション選択
+**追加関数**: `emacs-ai-agent-bridge-popup-select-session` - Emacsビルトインの`x-popup-menu`を使用したポップアップベースのセッション選択
 
 **モードライン表示**:
 - 現在のtmuxセッションがモードラインに`[tmux:0]`として表示される
@@ -191,9 +191,11 @@ Select tmux session (current: 0): [1, 2, claude, dev]
 - 表示には`global-mode-string`を使用（通常、モードラインの右側に表示）
 - `*ai*`バッファのモードラインにも表示され、簡単にアクセス可能
 
-**依存関係**:
-- `popup`パッケージ（バージョン0.5.3以降）が必要
-- Package-Requiresに追加され、自動インストール対応
+**ポップアップメニューの動作**:
+- popup.elの代わりにEmacsビルトインの`x-popup-menu`関数を使用
+- ポップアップメニューはモードライン上のマウスクリック位置に表示される
+- ユーザーがクリックした場所の近くにメニューを表示することで視線移動を最小化
+- 外部依存関係不要（popup.elへの依存を削除）
 
 ## Issue #15の修正内容
 
