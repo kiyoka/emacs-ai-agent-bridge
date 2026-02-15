@@ -9,7 +9,8 @@
       "WebFetch(domain:github.com)",
       "Bash(git rev-parse:*)",
       "Bash(emacs:*)",
-      "Bash(gh issue view:*)"
+      "Bash(gh issue view:*)",
+      "Bash(git commit:*)"
     ],
     "deny": []
   }
