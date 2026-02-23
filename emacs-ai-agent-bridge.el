@@ -85,6 +85,8 @@ Negative values capture from that many lines back in the scrollback buffer."
     (define-key map "4" 'emacs-ai-select-option-4)
     (define-key map "5" 'emacs-ai-select-option-5)
     (define-key map (kbd "C-m") 'emacs-ai-agent-bridge-smart-return)
+    (define-key map (kbd "C-c C-n") 'emacs-ai-agent-bridge-send-down)
+    (define-key map (kbd "C-c C-p") 'emacs-ai-agent-bridge-send-up)
     map)
   "Keymap for *ai* buffer.")
 
@@ -288,23 +290,40 @@ Sends the number key directly to select the option (Claude Code 2.0.31+)."
   (interactive)
   (emacs-ai-agent-bridge-select-option 5))
 
+(defun emacs-ai-agent-bridge-send-down ()
+  "Send Down arrow key to tmux session.
+Used to navigate Claude Code option prompts (Issue #17)."
+  (interactive)
+  (let ((session (or emacs-ai-agent-bridge-tmux-session
+                     (emacs-ai-agent-bridge-get-first-tmux-session))))
+    (if session
+        (progn
+          (emacs-ai-agent-bridge-send-key-to-tmux session "Down")
+          (message "Sent Down to tmux session: %s" session))
+      (message "No tmux sessions found"))))
+
+(defun emacs-ai-agent-bridge-send-up ()
+  "Send Up arrow key to tmux session.
+Used to navigate Claude Code option prompts (Issue #17)."
+  (interactive)
+  (let ((session (or emacs-ai-agent-bridge-tmux-session
+                     (emacs-ai-agent-bridge-get-first-tmux-session))))
+    (if session
+        (progn
+          (emacs-ai-agent-bridge-send-key-to-tmux session "Up")
+          (message "Sent Up to tmux session: %s" session))
+      (message "No tmux sessions found"))))
+
 (defun emacs-ai-agent-bridge-smart-return ()
   "Smart return key behavior for *ai* buffer.
-If the buffer contains a choice prompt, select option 1.
-If it's a text input prompt, send Enter to tmux.
+If a prompt is detected (tmux content unchanged), send Enter to tmux.
 Otherwise, do nothing."
   (interactive)
-  (let ((content (buffer-string))
-        (session (or emacs-ai-agent-bridge-tmux-session
+  (let ((session (or emacs-ai-agent-bridge-tmux-session
                      (emacs-ai-agent-bridge-get-first-tmux-session))))
     (cond
-     ;; Choice prompt - select option 1
-     ((emacs-ai-agent-bridge-is-choice-prompt-p content)
-      (emacs-ai-select-option-1))
-     ;; Text input prompt or any other prompt - send Enter
-     ((or (emacs-ai-agent-bridge-is-text-input-prompt-p content)
-          ;; Always allow Enter if we're at a prompt (content unchanged)
-          emacs-ai-agent-bridge--prompt-detected)
+     ;; Prompt detected (content unchanged) - send Enter
+     (emacs-ai-agent-bridge--prompt-detected
       (when session
         (emacs-ai-agent-bridge-send-key-to-tmux session "C-m")
         (message "Sent Enter to tmux session: %s" session)))
