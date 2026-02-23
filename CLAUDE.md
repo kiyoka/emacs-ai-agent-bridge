@@ -229,3 +229,33 @@ This ensures the selected session is used first, and only falls back to the firs
 - ✓ Switching sessions via popup menu now correctly routes all commands to the selected session
 - ✓ Text sending, option selection, and @ai commands all use the correct session
 - ✓ Auto-detection still works when no session is explicitly selected
+
+## Issue #17 Fix
+
+### Problem
+Claude Code UI changed again, and numeric key selection (1, 2, 3, etc.) stopped working for option prompts. Users must now navigate with up/down cursor keys to select options.
+
+### Fix
+Added two new keybindings to the `*ai*` buffer keymap:
+- `C-c C-n` - Send `Down` arrow key to tmux (move to next option)
+- `C-c C-p` - Send `Up` arrow key to tmux (move to previous option)
+
+**New Functions** (emacs-ai-agent-bridge.el):
+- `emacs-ai-agent-bridge-send-down` - Sends `Down` key to the selected tmux session
+- `emacs-ai-agent-bridge-send-up` - Sends `Up` key to the selected tmux session
+
+**Usage**:
+```
+ Do you want to proceed?
+   1. Yes
+ ❯ 2. Yes, and don't ask again for: git push:*
+   3. No
+```
+→ Use `C-c C-p` to move up to option 1, then `C-m` to confirm.
+
+**Note**: `C-n` and `C-p` were intentionally NOT used, as they are needed for free cursor movement within the `*ai*` buffer (which displays tmux scrollback history).
+
+**Verification**:
+- ✓ `C-c C-n` correctly sends `Down` arrow key to tmux
+- ✓ `C-c C-p` correctly sends `Up` arrow key to tmux
+- ✓ Both keybindings respect the selected tmux session (Issue #15 pattern)
