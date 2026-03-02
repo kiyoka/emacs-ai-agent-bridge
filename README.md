@@ -12,6 +12,7 @@ An Emacs extension that bridges an AI coding agent running in tmux with Emacs.
 - **One-time notification**: Display buffer only once per prompt detection
 - **Easy text sending**: Send selected region to AI agent with automatic execution
 - **Context awareness**: Automatically includes file path and line number with sent text
+- **Session persistence**: Selected tmux session is saved and restored across Emacs restarts
 
 ## Installation
 
@@ -84,8 +85,9 @@ Before using this extension, you need to have an AI agent running inside tmux.
 4. **If you have multiple tmux sessions**:
    - Use `M-x emacs-ai-agent-bridge-select-session` to switch sessions
    - Or click on the `[tmux:0]` indicator in the mode-line to select from a popup menu
+   - Your selection is automatically saved and restored on next Emacs startup
 
-**Note**: Emacs will automatically monitor the first tmux session it finds. If you want to monitor a specific session, set `emacs-ai-agent-bridge-tmux-session` in your configuration.
+**Note**: Emacs will automatically monitor the first tmux session it finds. If you want to monitor a specific session, set `emacs-ai-agent-bridge-tmux-session` in your configuration. When you select a session interactively, it is saved to `~/.emacs-ai-agent-bridge-session` and automatically restored on next startup.
 
 ### Send Text to AI Agent
 
@@ -185,6 +187,9 @@ M-x emacs-ai-agent-bridge-monitor-status
 
 ;; Monitoring interval in seconds (default: 2)
 (setq emacs-ai-agent-bridge-monitor-interval 2)
+
+;; File path to save the last selected session (default: "~/.emacs-ai-agent-bridge-session")
+(setq emacs-ai-agent-bridge-session-file "~/.emacs-ai-agent-bridge-session")
 ```
 
 ## How It Works
