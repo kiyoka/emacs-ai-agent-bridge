@@ -64,6 +64,12 @@ Negative values capture from that many lines back in the scrollback buffer."
   :type 'integer
   :group 'emacs-ai-agent-bridge)
 
+(defcustom emacs-ai-agent-bridge-session-file "~/.emacs-ai-agent-bridge-session"
+  "File path to save the last selected tmux session name.
+The session name is persisted so it can be restored after Emacs restart."
+  :type 'string
+  :group 'emacs-ai-agent-bridge)
+
 
 (defvar emacs-ai-agent-bridge--monitor-timer nil
   "Timer object for periodic monitoring.")
@@ -105,6 +111,25 @@ Sorts session names using natural sort order (0, 1, 2, ..., then alphabetically)
         nil
       (split-string output "\n" t))))
 
+(defun emacs-ai-agent-bridge-save-session ()
+  "Save the current tmux session name to file for persistence across restarts."
+  (when emacs-ai-agent-bridge-tmux-session
+    (with-temp-file (expand-file-name emacs-ai-agent-bridge-session-file)
+      (insert emacs-ai-agent-bridge-tmux-session))))
+
+(defun emacs-ai-agent-bridge-load-session ()
+  "Load the saved tmux session name from file if it still exists.
+Returns the session name if successfully restored, nil otherwise."
+  (let ((file (expand-file-name emacs-ai-agent-bridge-session-file)))
+    (when (file-exists-p file)
+      (let ((saved-session (with-temp-buffer
+                             (insert-file-contents file)
+                             (string-trim (buffer-string)))))
+        (when (and (not (string-empty-p saved-session))
+                   (member saved-session (emacs-ai-agent-bridge-get-all-tmux-sessions)))
+          (setq emacs-ai-agent-bridge-tmux-session saved-session)
+          saved-session)))))
+
 (defun emacs-ai-agent-bridge-select-session ()
   "Select a tmux session from available sessions and switch to it."
   (interactive)
@@ -117,6 +142,7 @@ Sorts session names using natural sort order (0, 1, 2, ..., then alphabetically)
                     nil t)))
     (when selected
       (setq emacs-ai-agent-bridge-tmux-session selected)
+      (emacs-ai-agent-bridge-save-session)
       ;; モニタリング中であれば再起動
       (when emacs-ai-agent-bridge--monitor-timer
         (emacs-ai-agent-bridge-stop-monitoring)
@@ -133,6 +159,7 @@ Sorts session names using natural sort order (0, 1, 2, ..., then alphabetically)
       (let ((selected (popup-menu* sessions)))
         (when selected
           (setq emacs-ai-agent-bridge-tmux-session selected)
+          (emacs-ai-agent-bridge-save-session)
           ;; モニタリング中であれば再起動
           (when emacs-ai-agent-bridge--monitor-timer
             (emacs-ai-agent-bridge-stop-monitoring)
@@ -505,10 +532,11 @@ Includes scrollback history based on `emacs-ai-agent-bridge-scrollback-lines'."
     (cancel-timer emacs-ai-agent-bridge--monitor-timer))
   (setq emacs-ai-agent-bridge--last-capture nil)  ; Reset last capture
   (setq emacs-ai-agent-bridge--prompt-detected nil)  ; Reset detection flag
-  ;; Fix session if not already set
+  ;; Fix session if not already set: try loading saved session first
   (unless emacs-ai-agent-bridge-tmux-session
-    (setq emacs-ai-agent-bridge-tmux-session
-          (emacs-ai-agent-bridge-get-first-tmux-session)))
+    (or (emacs-ai-agent-bridge-load-session)
+        (setq emacs-ai-agent-bridge-tmux-session
+              (emacs-ai-agent-bridge-get-first-tmux-session))))
   (setq emacs-ai-agent-bridge--monitor-timer
         (run-with-timer 0 emacs-ai-agent-bridge-monitor-interval
                         #'emacs-ai-agent-bridge-monitor-tmux))

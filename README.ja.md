@@ -12,6 +12,7 @@ tmuxで実行されているAIコーディングエージェントとEmacsを橋
 - **1回限りの通知**: プロンプト検出ごとに1回だけバッファを表示
 - **簡単なテキスト送信**: 選択した領域を自動実行付きでAIエージェントに送信
 - **コンテキスト認識**: 送信テキストにファイルパスと行番号を自動的に含める
+- **セッション永続化**: 選択したtmuxセッションをEmacs再起動後も保持・復元
 
 ## インストール
 
@@ -84,8 +85,9 @@ Emacs起動時に自動的に監視を開始するには:
 4. **複数のtmuxセッションがある場合**:
    - `M-x emacs-ai-agent-bridge-select-session`を使用してセッションを切り替え
    - または、モードラインの`[tmux:0]`表示をクリックしてポップアップメニューから選択
+   - 選択したセッションは自動的に保存され、次回のEmacs起動時に復元されます
 
-**注意**: Emacsは自動的に最初に見つかったtmuxセッションを監視します。特定のセッションを監視したい場合は、設定で`emacs-ai-agent-bridge-tmux-session`を設定してください。
+**注意**: Emacsは自動的に最初に見つかったtmuxセッションを監視します。特定のセッションを監視したい場合は、設定で`emacs-ai-agent-bridge-tmux-session`を設定してください。セッションを対話的に選択した場合、`~/.emacs-ai-agent-bridge-session`に保存され、次回起動時に自動的に復元されます。
 
 ### AIエージェントへのテキスト送信
 
@@ -185,6 +187,9 @@ M-x emacs-ai-agent-bridge-monitor-status
 
 ;; 監視間隔（秒）（デフォルト: 2）
 (setq emacs-ai-agent-bridge-monitor-interval 2)
+
+;; セッション保存先ファイルパス（デフォルト: "~/.emacs-ai-agent-bridge-session"）
+(setq emacs-ai-agent-bridge-session-file "~/.emacs-ai-agent-bridge-session")
 ```
 
 ## 動作の仕組み
