@@ -341,14 +341,79 @@ Used to navigate Claude Code option prompts (Issue #17)."
           (message "Sent Up to tmux session: %s" session))
       (message "No tmux sessions found"))))
 
+(defun emacs-ai-agent-bridge-is-cursor-on-input-prompt-p ()
+  "Check if the current line is a text input prompt.
+Returns non-nil if the line contains `❯' and is surrounded by
+lines containing `----------' (separator lines above and below)."
+  (let ((line (buffer-substring-no-properties
+               (line-beginning-position) (line-end-position)))
+        (prev-line (save-excursion
+                     (if (= (forward-line -1) 0)
+                         (buffer-substring-no-properties
+                          (line-beginning-position) (line-end-position))
+                       "")))
+        (next-line (save-excursion
+                     (if (= (forward-line 1) 0)
+                         (buffer-substring-no-properties
+                          (line-beginning-position) (line-end-position))
+                       ""))))
+    (and (string-match-p "❯" line)
+         (not (string-match-p "[0-9]+\\." line))
+         (string-match-p "-----------" prev-line)
+         (string-match-p "-----------" next-line))))
+
+(defun emacs-ai-agent-bridge-flash-region (beg end)
+  "Flash the region between BEG and END with a brief highlight effect."
+  (let ((overlay (make-overlay beg end)))
+    (overlay-put overlay 'face '(:background "#FFFF00" :foreground "#000000"))
+    (run-at-time 0.15 nil
+                 (lambda (ov)
+                   (overlay-put ov 'face '(:background "#AADD00" :foreground "#000000"))
+                   (run-at-time 0.15 nil #'delete-overlay ov))
+                 overlay)))
+
+(defun emacs-ai-agent-bridge-read-and-send-input ()
+  "Read text from minibuffer and send it to tmux session.
+After sending, the input text is displayed on the prompt line in
+the *ai* buffer with a flash effect."
+  (let ((session (or emacs-ai-agent-bridge-tmux-session
+                     (emacs-ai-agent-bridge-get-first-tmux-session)))
+        (prompt-line-pos (line-beginning-position))
+        (prompt-line-end (line-end-position))
+        (input (read-string "AI input: ")))
+    (when (and session (not (string-empty-p input)))
+      (emacs-ai-agent-bridge-send-to-tmux session input)
+      (emacs-ai-agent-bridge-send-key-to-tmux session "C-m")
+      ;; Reflect input text on the prompt line in *ai* buffer
+      (let ((inhibit-read-only t))
+        (save-excursion
+          (goto-char prompt-line-pos)
+          (let ((line-text (buffer-substring-no-properties
+                            (point) prompt-line-end)))
+            (when (string-match "❯\\(.*\\)$" line-text)
+              (let* ((match-start (+ prompt-line-pos (match-beginning 1)))
+                     (match-end (+ prompt-line-pos (match-end 1)))
+                     (new-text (concat " " input)))
+                (delete-region match-start match-end)
+                (goto-char match-start)
+                (insert new-text)
+                (emacs-ai-agent-bridge-flash-region
+                 match-start (+ match-start (length new-text))))))))
+      (message "Sent input to tmux session: %s" session))))
+
 (defun emacs-ai-agent-bridge-smart-return ()
   "Smart return key behavior for *ai* buffer.
 If a prompt is detected (tmux content unchanged), send Enter to tmux.
+If the cursor is on an input prompt line with `❯', read input from minibuffer.
 Otherwise, do nothing."
   (interactive)
   (let ((session (or emacs-ai-agent-bridge-tmux-session
                      (emacs-ai-agent-bridge-get-first-tmux-session))))
     (cond
+     ;; Prompt detected and cursor is on input prompt line - read from minibuffer
+     ((and emacs-ai-agent-bridge--prompt-detected
+           (emacs-ai-agent-bridge-is-cursor-on-input-prompt-p))
+      (emacs-ai-agent-bridge-read-and-send-input))
      ;; Prompt detected (content unchanged) - send Enter
      (emacs-ai-agent-bridge--prompt-detected
       (when session
