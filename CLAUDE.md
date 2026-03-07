@@ -259,3 +259,38 @@ Added two new keybindings to the `*ai*` buffer keymap:
 - ✓ `C-c C-n` correctly sends `Down` arrow key to tmux
 - ✓ `C-c C-p` correctly sends `Up` arrow key to tmux
 - ✓ Both keybindings respect the selected tmux session (Issue #15 pattern)
+## Issue #21 Implementation
+
+### Feature Request
+When pressing Enter on a text input prompt (`❯`) in the `*ai*` buffer, accept input from the minibuffer and send it to tmux.
+
+### Problem
+There was no way to directly input text from the `*ai*` buffer to Claude Code's text input prompt (marked with `❯`).
+
+### Implementation
+
+**New Functions**:
+- `emacs-ai-agent-bridge-is-cursor-on-input-prompt-p` - Checks if the cursor is on a text input prompt line. Conditions: line contains `❯`, does not contain number+dot (option numbers), and is surrounded by `----------` separator lines above and below
+- `emacs-ai-agent-bridge-flash-region` - Briefly highlights sent text with a flash effect
+- `emacs-ai-agent-bridge-read-and-send-input` - Reads text from minibuffer and sends it to the tmux session. After sending, displays the input text on the prompt line
+
+**Modified Function**:
+- `emacs-ai-agent-bridge-smart-return` - Extended to launch minibuffer input mode when prompt is detected and cursor is on an input prompt line
+
+**Workflow**:
+1. Place cursor on the `❯` prompt line in the `*ai*` buffer and press Enter
+2. "AI input: " prompt appears in the minibuffer
+3. Type text and press Enter to send
+4. Input text is displayed on the prompt line with a flash highlight effect
+
+**Prompt Detection Conditions**:
+- Line contains `❯`
+- Line does not contain number+dot (option numbers)
+- Line above contains `-----------`
+- Line below contains `-----------`
+
+**Verification**:
+- ✓ Pressing Enter on `❯` prompt line launches minibuffer input
+- ✓ Input text is correctly sent to tmux session
+- ✓ After sending, input text is displayed with flash effect on prompt line
+- ✓ Does not misfire on option prompts (with numbers)
