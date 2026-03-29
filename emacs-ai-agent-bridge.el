@@ -83,6 +83,15 @@ The session name is persisted so it can be restored after Emacs restart."
 (defvar emacs-ai-agent-bridge--prompt-detected nil
   "Flag to track if prompt has already been detected and buffer shown.")
 
+(defvar emacs-ai-agent-bridge--spinner-chars '("◐" "◓" "◑" "◒")
+  "List of spinner characters for mode-line animation.")
+
+(defvar emacs-ai-agent-bridge--spinner-index 0
+  "Current index into `emacs-ai-agent-bridge--spinner-chars'.")
+
+(defvar emacs-ai-agent-bridge--spinner-active nil
+  "Non-nil when the AI agent is actively producing output.")
+
 (defvar emacs-ai-agent-bridge-mode-map
   (let ((map (make-sparse-keymap)))
     (define-key map "1" 'emacs-ai-select-option-1)
@@ -582,10 +591,17 @@ Includes scrollback history based on `emacs-ai-agent-bridge-scrollback-lines'."
          ((and (emacs-ai-agent-bridge-content-unchanged-p content)
                (not emacs-ai-agent-bridge--prompt-detected))
           (emacs-ai-agent-bridge-update-ai-buffer content)
-          (setq emacs-ai-agent-bridge--prompt-detected t))
-         ;; Content changed - reset detection flag
+          (setq emacs-ai-agent-bridge--prompt-detected t)
+          (setq emacs-ai-agent-bridge--spinner-active nil)
+          (force-mode-line-update t))
+         ;; Content changed - reset detection flag, advance spinner
          ((not (emacs-ai-agent-bridge-content-unchanged-p content))
-          (setq emacs-ai-agent-bridge--prompt-detected nil)))
+          (setq emacs-ai-agent-bridge--prompt-detected nil)
+          (setq emacs-ai-agent-bridge--spinner-active t)
+          (setq emacs-ai-agent-bridge--spinner-index
+                (mod (1+ emacs-ai-agent-bridge--spinner-index)
+                     (length emacs-ai-agent-bridge--spinner-chars)))
+          (force-mode-line-update t)))
         (setq emacs-ai-agent-bridge--last-capture content))
     (error
      (message "Error monitoring tmux: %s" (error-message-string err)))))
@@ -597,6 +613,8 @@ Includes scrollback history based on `emacs-ai-agent-bridge-scrollback-lines'."
     (cancel-timer emacs-ai-agent-bridge--monitor-timer))
   (setq emacs-ai-agent-bridge--last-capture nil)  ; Reset last capture
   (setq emacs-ai-agent-bridge--prompt-detected nil)  ; Reset detection flag
+  (setq emacs-ai-agent-bridge--spinner-active nil)  ; Reset spinner
+  (setq emacs-ai-agent-bridge--spinner-index 0)
   ;; Fix session if not already set: try loading saved session first
   (unless emacs-ai-agent-bridge-tmux-session
     (or (emacs-ai-agent-bridge-load-session)
@@ -785,21 +803,35 @@ Send the text after @ai to tmux and delete the line."
   '(:eval
     (when (and emacs-ai-agent-bridge-input-mode
                emacs-ai-agent-bridge-tmux-session)
-      (propertize (format "[tmux:%s]" emacs-ai-agent-bridge-tmux-session)
-                  'face 'font-lock-constant-face
-                  'mouse-face 'mode-line-highlight
-                  'help-echo "Click to switch tmux session"
-                  'keymap emacs-ai-agent-bridge-mode-line-map)))
+      (let* ((spinner (if emacs-ai-agent-bridge--spinner-active
+                          (concat " " (nth emacs-ai-agent-bridge--spinner-index
+                                           emacs-ai-agent-bridge--spinner-chars))
+                        ""))
+             (face (if emacs-ai-agent-bridge--spinner-active
+                       'font-lock-warning-face
+                     'font-lock-constant-face)))
+        (propertize (format "[tmux:%s%s]" emacs-ai-agent-bridge-tmux-session spinner)
+                    'face face
+                    'mouse-face 'mode-line-highlight
+                    'help-echo "Click to switch tmux session"
+                    'keymap emacs-ai-agent-bridge-mode-line-map))))
   "Mode-line format for tmux session display.")
 
 (defvar emacs-ai-agent-bridge-ai-buffer-mode-line-format
   '(:eval
     (when emacs-ai-agent-bridge-tmux-session
-      (propertize (format "[tmux:%s]" emacs-ai-agent-bridge-tmux-session)
-                  'face 'font-lock-constant-face
-                  'mouse-face 'mode-line-highlight
-                  'help-echo "Click to switch tmux session"
-                  'keymap emacs-ai-agent-bridge-mode-line-map)))
+      (let* ((spinner (if emacs-ai-agent-bridge--spinner-active
+                          (concat " " (nth emacs-ai-agent-bridge--spinner-index
+                                           emacs-ai-agent-bridge--spinner-chars))
+                        ""))
+             (face (if emacs-ai-agent-bridge--spinner-active
+                       'font-lock-warning-face
+                     'font-lock-constant-face)))
+        (propertize (format "[tmux:%s%s]" emacs-ai-agent-bridge-tmux-session spinner)
+                    'face face
+                    'mouse-face 'mode-line-highlight
+                    'help-echo "Click to switch tmux session"
+                    'keymap emacs-ai-agent-bridge-mode-line-map))))
   "Mode-line format for tmux session display in *ai* buffer.")
 
 (defun emacs-ai-agent-bridge-get-original-return-command ()
