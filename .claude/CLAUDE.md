@@ -294,3 +294,44 @@ There was no way to directly input text from the `*ai*` buffer to Claude Code's 
 - ✓ Input text is correctly sent to tmux session
 - ✓ After sending, input text is displayed with flash effect on prompt line
 - ✓ Does not misfire on option prompts (with numbers)
+
+## Issue #25 Fix
+
+### Problem
+When using multiple tmux sessions, switching the target session from Emacs (via the
+mode-line popup or `M-x emacs-ai-agent-bridge-select-session`) updated the captured
+content correctly, but text/keys sent from Emacs were still delivered to the **wrong**
+tmux session (typically the first / attached session). This is a recurrence of the
+symptom originally addressed in Issue #15.
+
+### Root Cause
+The capture path and the send path built the tmux target differently:
+- Capture (`emacs-ai-agent-bridge-capture-tmux-pane`) used `-t SESSION:PANE` (e.g. `1:0`).
+- Send (`emacs-ai-agent-bridge-send-to-tmux` and
+  `emacs-ai-agent-bridge-send-key-to-tmux`) used a bare `-t SESSION` (e.g. `1`).
+
+A bare numeric target like `-t 1` is ambiguous in tmux's target resolution: when
+sessions are named with plain numbers, tmux may interpret the token as a **window index
+within the currently attached session** rather than the **session named "1"**. As a
+result, `send-keys` landed in the wrong session even though
+`emacs-ai-agent-bridge-tmux-session` was set correctly. Capture was unaffected because
+it always included `:PANE`.
+
+### Fix
+Made the send helpers build the target the same way as the capture path
+(emacs-ai-agent-bridge.el):
+- `emacs-ai-agent-bridge-send-to-tmux` - now targets `SESSION:PANE` built from
+  `session` and `emacs-ai-agent-bridge-tmux-pane`
+- `emacs-ai-agent-bridge-send-key-to-tmux` - same `SESSION:PANE` target
+
+Because every send caller routes through these two helpers, the fix is centralized and
+covers region sending, option selection, Up/Down navigation, minibuffer input, and
+`@ai` line processing.
+
+**Verification**:
+- ✓ After switching sessions, text and keys are delivered to the selected session
+- ✓ Capture and send now target the same `SESSION:PANE`
+- ✓ Works with numeric session names (`0`, `1`, ...) that previously misfired
+- ✓ File byte-compiles cleanly (only the unrelated `popup` dependency require)
+
+**Version**: bumped from 0.6.0 to 0.6.1
