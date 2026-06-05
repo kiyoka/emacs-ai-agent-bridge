@@ -3,7 +3,7 @@
 ;; Copyright (C) 2025
 
 ;; Author:
-;; Version: 0.6.0
+;; Version: 0.6.1
 ;; Package-Requires: ((emacs "25.1") (popup "0.5.3"))
 ;; Keywords: tools, processes
 ;; URL: https://github.com/kiyoka/emacs-ai-agent-bridge
@@ -177,22 +177,30 @@ Returns the session name if successfully restored, nil otherwise."
 
 (defun emacs-ai-agent-bridge-send-to-tmux (session text)
   "Send TEXT to tmux SESSION line by line with 0.1 second delay.
-This is a helper function to avoid code duplication."
-  (let ((lines (split-string text "\n" t)))
+This is a helper function to avoid code duplication.
+The target includes the pane (SESSION:PANE) to match
+`emacs-ai-agent-bridge-capture-tmux-pane' and avoid ambiguous
+tmux target resolution when sessions are named with plain numbers."
+  (let ((target (format "%s:%s" session emacs-ai-agent-bridge-tmux-pane))
+        (lines (split-string text "\n" t)))
     (dolist (line lines)
       (shell-command
        (format "tmux send-keys -t %s %s"
-               (shell-quote-argument session)
+               (shell-quote-argument target)
                (shell-quote-argument line)))
       (sit-for 0.1))))
 
 (defun emacs-ai-agent-bridge-send-key-to-tmux (session key)
   "Send KEY to tmux SESSION.
-Common keys: C-m (Enter), Up, Down, etc."
-  (shell-command
-   (format "tmux send-keys -t %s %s"
-           (shell-quote-argument session)
-           key)))
+Common keys: C-m (Enter), Up, Down, etc.
+The target includes the pane (SESSION:PANE) to match
+`emacs-ai-agent-bridge-capture-tmux-pane' and avoid ambiguous
+tmux target resolution when sessions are named with plain numbers."
+  (let ((target (format "%s:%s" session emacs-ai-agent-bridge-tmux-pane)))
+    (shell-command
+     (format "tmux send-keys -t %s %s"
+             (shell-quote-argument target)
+             key))))
 
 (defun emacs-ai-agent-bridge-get-git-root ()
   "Get the git repository root directory.
