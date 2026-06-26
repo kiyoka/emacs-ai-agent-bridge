@@ -3,7 +3,7 @@
 ;; Copyright (C) 2025
 
 ;; Author:
-;; Version: 0.6.1
+;; Version: 0.7.0
 ;; Package-Requires: ((emacs "25.1") (popup "0.5.3"))
 ;; Keywords: tools, processes
 ;; URL: https://github.com/kiyoka/emacs-ai-agent-bridge
@@ -57,6 +57,18 @@ If nil, will use the first available session."
   :type 'integer
   :group 'emacs-ai-agent-bridge)
 
+(defcustom emacs-ai-agent-bridge-buffering-refresh-interval 60
+  "Seconds of continuous change before forcing an *ai* buffer refresh.
+Normally the *ai* buffer is only updated once the tmux content stops
+changing (a prompt is detected).  When the AI agent keeps producing
+output for a long time, the buffer would otherwise never update.  After
+the content has been changing continuously for this many seconds, the
+current (still-changing) content is reflected into the *ai* buffer using
+`emacs-ai-agent-bridge-buffering-face' to signal that it is not final.
+A value of 0 disables this forced refresh."
+  :type 'integer
+  :group 'emacs-ai-agent-bridge)
+
 (defcustom emacs-ai-agent-bridge-scrollback-lines 3000
   "Number of scrollback lines to capture from tmux history.
 A value of 0 captures only visible content.
@@ -68,6 +80,16 @@ Negative values capture from that many lines back in the scrollback buffer."
   "File path to save the last selected tmux session name.
 The session name is persisted so it can be restored after Emacs restart."
   :type 'string
+  :group 'emacs-ai-agent-bridge)
+
+(defface emacs-ai-agent-bridge-buffering-face
+  '((((background dark)) :foreground "gray50")
+    (((background light)) :foreground "gray70")
+    (t :foreground "gray60"))
+  "Face for still-changing (not yet final) tmux content in the *ai* buffer.
+Used when `emacs-ai-agent-bridge-buffering-refresh-interval' forces a
+refresh while the AI agent is still producing output, so the faint color
+signals that the content is not final."
   :group 'emacs-ai-agent-bridge)
 
 
@@ -91,6 +113,11 @@ The session name is persisted so it can be restored after Emacs restart."
 
 (defvar emacs-ai-agent-bridge--spinner-active nil
   "Non-nil when the AI agent is actively producing output.")
+
+(defvar emacs-ai-agent-bridge--change-start-time nil
+  "Time when the tmux content started changing continuously.
+Nil when the content is stable.  Used to force an *ai* buffer refresh
+after `emacs-ai-agent-bridge-buffering-refresh-interval' seconds.")
 
 (defvar emacs-ai-agent-bridge-mode-map
   (let ((map (make-sparse-keymap)))
@@ -549,8 +576,11 @@ Includes scrollback history based on `emacs-ai-agent-bridge-scrollback-lines'."
         (put-text-property start end 'face 'font-lock-keyword-face)))
     (buffer-string)))
 
-(defun emacs-ai-agent-bridge-update-ai-buffer (content)
-  "Update the *ai* buffer with CONTENT and display it without switching focus."
+(defun emacs-ai-agent-bridge-update-ai-buffer (content &optional buffering)
+  "Update the *ai* buffer with CONTENT and display it without switching focus.
+When BUFFERING is non-nil, the AI agent's output is still changing and has
+not reached a prompt; the whole content is dimmed with
+`emacs-ai-agent-bridge-buffering-face' to signal it is not final."
   (let* ((buffer (get-buffer-create emacs-ai-agent-bridge--ai-buffer-name))
          (window (get-buffer-window buffer))
          ;; Get window width for adjusting box lines
@@ -561,8 +591,9 @@ Includes scrollback history based on `emacs-ai-agent-bridge-scrollback-lines'."
          (adjusted-content (emacs-ai-agent-bridge-adjust-box-lines content window-width))
          ;; Then trim trailing empty lines
          (trimmed-content (replace-regexp-in-string "\\(\n\\s-*\\)+\\'" "" adjusted-content))
-         ;; Finally colorize options if it's a choice prompt
-         (final-content (if (emacs-ai-agent-bridge-is-choice-prompt-p trimmed-content)
+         ;; Finally colorize options if it's a choice prompt (skip while buffering)
+         (final-content (if (and (not buffering)
+                                 (emacs-ai-agent-bridge-is-choice-prompt-p trimmed-content))
                            (emacs-ai-agent-bridge-colorize-options trimmed-content)
                          trimmed-content)))
     (with-current-buffer buffer
@@ -570,6 +601,13 @@ Includes scrollback history based on `emacs-ai-agent-bridge-scrollback-lines'."
         (erase-buffer)
         (insert final-content)
         (goto-char (point-max)))
+      ;; Dim the whole buffer while content is still changing (not final),
+      ;; and restore normal colors once it has settled.  `buffer-face-set'
+      ;; remaps the default face for the entire buffer, which reliably tints
+      ;; every line regardless of any per-line text properties.
+      (if buffering
+          (buffer-face-set 'emacs-ai-agent-bridge-buffering-face)
+        (buffer-face-set nil))
       ;; Apply the keymap BEFORE making buffer read-only
       (use-local-map emacs-ai-agent-bridge-mode-map)
       ;; Make buffer read-only
@@ -601,6 +639,7 @@ Includes scrollback history based on `emacs-ai-agent-bridge-scrollback-lines'."
           (emacs-ai-agent-bridge-update-ai-buffer content)
           (setq emacs-ai-agent-bridge--prompt-detected t)
           (setq emacs-ai-agent-bridge--spinner-active nil)
+          (setq emacs-ai-agent-bridge--change-start-time nil)
           (force-mode-line-update t))
          ;; Content changed - reset detection flag, advance spinner
          ((not (emacs-ai-agent-bridge-content-unchanged-p content))
@@ -609,6 +648,19 @@ Includes scrollback history based on `emacs-ai-agent-bridge-scrollback-lines'."
           (setq emacs-ai-agent-bridge--spinner-index
                 (mod (1+ emacs-ai-agent-bridge--spinner-index)
                      (length emacs-ai-agent-bridge--spinner-chars)))
+          ;; Track how long the content has been changing continuously
+          (unless emacs-ai-agent-bridge--change-start-time
+            (setq emacs-ai-agent-bridge--change-start-time (current-time)))
+          ;; If it has been changing for too long, reflect the current
+          ;; (still-changing) content into the *ai* buffer, dimmed, then
+          ;; restart the timer so it refreshes again after another interval.
+          (when (and (> emacs-ai-agent-bridge-buffering-refresh-interval 0)
+                     (>= (float-time
+                          (time-subtract (current-time)
+                                         emacs-ai-agent-bridge--change-start-time))
+                         emacs-ai-agent-bridge-buffering-refresh-interval))
+            (emacs-ai-agent-bridge-update-ai-buffer content t)
+            (setq emacs-ai-agent-bridge--change-start-time (current-time)))
           (force-mode-line-update t)))
         (setq emacs-ai-agent-bridge--last-capture content))
     (error
@@ -623,6 +675,7 @@ Includes scrollback history based on `emacs-ai-agent-bridge-scrollback-lines'."
   (setq emacs-ai-agent-bridge--prompt-detected nil)  ; Reset detection flag
   (setq emacs-ai-agent-bridge--spinner-active nil)  ; Reset spinner
   (setq emacs-ai-agent-bridge--spinner-index 0)
+  (setq emacs-ai-agent-bridge--change-start-time nil)  ; Reset buffering timer
   ;; Fix session if not already set: try loading saved session first
   (unless emacs-ai-agent-bridge-tmux-session
     (or (emacs-ai-agent-bridge-load-session)
