@@ -188,6 +188,13 @@ M-x emacs-ai-agent-bridge-monitor-status
 ;; 監視間隔（秒）（デフォルト: 2）
 (setq emacs-ai-agent-bridge-monitor-interval 2)
 
+;; 画面が変化し続けている場合に *ai* バッファへ強制反映するまでの秒数
+;; （デフォルト: 60、0で無効）。AIエージェントが出力し続けている間、*ai*
+;; バッファは通常、出力が落ち着くまで更新されません。この秒数だけ変化が継続
+;; したら、まだ変化中の内容を薄いグレーの文字色で *ai* バッファに反映し、
+;; 内容がまだ確定していないことを示します。
+(setq emacs-ai-agent-bridge-buffering-refresh-interval 60)
+
 ;; セッション保存先ファイルパス（デフォルト: "~/.emacs-ai-agent-bridge-session"）
 (setq emacs-ai-agent-bridge-session-file "~/.emacs-ai-agent-bridge-session")
 ```

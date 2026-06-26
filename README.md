@@ -188,6 +188,13 @@ M-x emacs-ai-agent-bridge-monitor-status
 ;; Monitoring interval in seconds (default: 2)
 (setq emacs-ai-agent-bridge-monitor-interval 2)
 
+;; Seconds of continuous change before forcing a dimmed *ai* buffer refresh
+;; (default: 60, 0 disables). While the AI agent keeps producing output, the
+;; *ai* buffer normally does not update until the output stabilizes. After this
+;; many seconds of continuous change, the still-changing content is reflected
+;; into the *ai* buffer in a faint gray color to show it is not final.
+(setq emacs-ai-agent-bridge-buffering-refresh-interval 60)
+
 ;; File path to save the last selected session (default: "~/.emacs-ai-agent-bridge-session")
 (setq emacs-ai-agent-bridge-session-file "~/.emacs-ai-agent-bridge-session")
 ```

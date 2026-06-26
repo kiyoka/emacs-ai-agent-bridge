@@ -57,6 +57,7 @@ The system detects when the AI agent is waiting for input by monitoring if the t
 - `emacs-ai-agent-bridge-tmux-pane` - Pane ID (default: "0")
 - `emacs-ai-agent-bridge-monitor-interval` - Check interval in seconds (default: 2)
 - `emacs-ai-agent-bridge-scrollback-lines` - Number of scrollback lines to capture from tmux history (default: 3000)
+- `emacs-ai-agent-bridge-buffering-refresh-interval` - Seconds of continuous change before forcing a dimmed *ai* buffer refresh (default: 60, 0 disables)
 
 ## File Structure
 
@@ -335,3 +336,66 @@ covers region sending, option selection, Up/Down navigation, minibuffer input, a
 - ✓ File byte-compiles cleanly (only the unrelated `popup` dependency require)
 
 **Version**: bumped from 0.6.0 to 0.6.1
+
+## Issue #27 Implementation
+
+### Feature Request
+Even when the tmux screen keeps changing continuously, after the change has
+continued for 1 minute, reflect the current content into the `*ai*` buffer. In
+that case, display the text in a faint color (e.g. light gray) so it is clear
+the tmux screen is still changing.
+
+### Problem
+The `*ai*` buffer was only updated when the tmux content **stopped** changing
+(a prompt was detected via `emacs-ai-agent-bridge-content-unchanged-p`). While
+the AI agent kept producing output, the buffer never updated — only the
+mode-line spinner (Issue #23) animated. For long-running output, the user could
+not see any progress in the `*ai*` buffer until the output stabilized.
+
+### Implementation
+
+**New configuration variable**:
+- `emacs-ai-agent-bridge-buffering-refresh-interval` (default: 60, 0 disables) -
+  Seconds of continuous change before forcing a dimmed `*ai*` buffer refresh.
+
+**New face**:
+- `emacs-ai-agent-bridge-buffering-face` - Faint gray (background-aware:
+  `gray50` on dark, `gray70` on light) used to display still-changing content.
+
+**New state variable**:
+- `emacs-ai-agent-bridge--change-start-time` - Records when the content started
+  changing continuously; nil while the content is stable.
+
+**Modified functions**:
+- `emacs-ai-agent-bridge-update-ai-buffer` - Now takes an optional `buffering`
+  argument. When non-nil, option colorization is skipped and the whole buffer is
+  dimmed via `buffer-face-set` (remapping the default face to
+  `emacs-ai-agent-bridge-buffering-face`); when nil it restores normal colors
+  with `(buffer-face-set nil)`. Using `buffer-face-set` reliably tints every
+  line regardless of per-line text properties.
+- `emacs-ai-agent-bridge-monitor-tmux` - In the "content changed" branch, records
+  `--change-start-time` on the first change, and once the elapsed time reaches
+  `emacs-ai-agent-bridge-buffering-refresh-interval` it calls
+  `emacs-ai-agent-bridge-update-ai-buffer` with `buffering` = t and restarts the
+  timer (so it refreshes again every interval while still changing). The
+  "content unchanged / prompt detected" branch clears `--change-start-time`, so
+  the stabilized content is shown in the normal (non-dimmed) color.
+- `emacs-ai-agent-bridge-start-monitoring` - Resets `--change-start-time` to nil.
+
+### Behavior
+- Output confirmed (prompt detected): content shown in normal color.
+- Output changing for >= 60s: current (still-changing) content reflected into the
+  `*ai*` buffer dimmed in faint gray; refreshes again every 60s while changing.
+- Once the output stabilizes, the normal-color update replaces the dimmed view.
+
+### Verification
+- ✓ `buffering` = t dims the whole `*ai*` buffer content; `buffering` = nil leaves
+  it in the normal color
+- ✓ Forced dimmed refresh fires after the configured interval of continuous change
+  and restarts the timer for subsequent refreshes
+- ✓ When content stabilizes, the change timer clears and the buffer reverts to
+  normal color
+- ✓ `emacs-ai-agent-bridge-buffering-refresh-interval` = 0 disables the forced refresh
+- ✓ File byte-compiles cleanly (only the unrelated `popup` dependency require)
+
+**Version**: bumped from 0.6.1 to 0.7.0
