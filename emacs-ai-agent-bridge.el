@@ -3,7 +3,7 @@
 ;; Copyright (C) 2025
 
 ;; Author:
-;; Version: 0.7.1
+;; Version: 0.7.2
 ;; Package-Requires: ((emacs "25.1") (popup "0.5.3"))
 ;; Keywords: tools, processes
 ;; URL: https://github.com/kiyoka/emacs-ai-agent-bridge
@@ -617,8 +617,13 @@ not reached a prompt; the whole content is dimmed with
                         80)) ; Default width if no window yet
          ;; Adjust box drawing lines first
          (adjusted-content (emacs-ai-agent-bridge-adjust-box-lines content window-width))
-         ;; Then trim trailing empty lines
-         (trimmed-content (replace-regexp-in-string "\\(\n\\s-*\\)+\\'" "" adjusted-content))
+         ;; Then trim trailing empty lines.  A plain character alternative is
+         ;; used instead of "\\(\n\\s-*\\)+\\'": \s- can match newline
+         ;; depending on the current buffer's syntax table, and the nested
+         ;; quantifier then explodes with catastrophic backtracking (2^N) on
+         ;; captures containing long runs of blank lines, freezing Emacs for
+         ;; minutes at 100% CPU.
+         (trimmed-content (replace-regexp-in-string "[ \t\r\n]+\\'" "" adjusted-content))
          ;; Finally colorize options if it's a choice prompt (skip while buffering)
          (final-content (if (and (not buffering)
                                  (emacs-ai-agent-bridge-is-choice-prompt-p trimmed-content))

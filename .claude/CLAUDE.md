@@ -465,3 +465,36 @@ Three structural problems combined to cause the freeze:
 - ✓ File byte-compiles cleanly (only pre-existing warnings)
 
 **Version**: bumped from 0.7.0 to 0.7.1
+
+## Catastrophic Regex Backtracking Fix (v0.7.2)
+
+### Problem
+Emacs froze at 100% CPU for minutes (recoverable only with repeated C-g) whenever
+the `*ai*` buffer was updated with a capture containing a long run of blank lines
+(e.g. a mid-redraw Claude Code screen). Because the Issue #27 buffering refresh
+fires after 60 seconds of continuous change, the freeze typically hit shortly
+after starting Emacs while the AI agent was still producing output — which made
+it look like a "startup freeze that only happens when tmux is running".
+
+### Root Cause
+The trailing-blank-line trim in `emacs-ai-agent-bridge-update-ai-buffer` used
+`"\\(\n\\s-*\\)+\\'"`. In buffers whose syntax table gives newline whitespace
+syntax (fundamental-mode, text-mode, ... — the regexp runs in whatever buffer is
+current when the monitor timer fires), `\s-` also matches `\n`, so the nested
+quantifier can partition a run of N newlines in 2^(N-1) ways. When the run is
+followed by more text, `\'` fails and the engine explores all of them:
+25 blank lines ≈ 4 s, 38 blank lines ≈ 9 hours of CPU. Diagnosed by sending
+SIGUSR2 to the frozen Emacs (`debug-on-event`), which produced a Lisp backtrace
+pointing at this exact `replace-regexp-in-string` call.
+
+### Fix
+Replaced the pattern with a plain character alternative, which is linear-time
+and independent of the current syntax table:
+`(replace-regexp-in-string "[ \t\r\n]+\\'" "" adjusted-content)`
+
+### Verification
+- ✓ 38- and 60-newline runs trim in < 0.1 ms (previously hours)
+- ✓ Realistic mid-redraw capture content processes in < 0.1 ms with correct result
+- ✓ File byte-compiles cleanly (only pre-existing warnings)
+
+**Version**: bumped from 0.7.1 to 0.7.2
