@@ -3,7 +3,7 @@
 ;; Copyright (C) 2025
 
 ;; Author:
-;; Version: 0.7.0
+;; Version: 0.7.2
 ;; Package-Requires: ((emacs "25.1") (popup "0.5.3"))
 ;; Keywords: tools, processes
 ;; URL: https://github.com/kiyoka/emacs-ai-agent-bridge
@@ -132,20 +132,41 @@ after `emacs-ai-agent-bridge-buffering-refresh-interval' seconds.")
     map)
   "Keymap for *ai* buffer.")
 
-(defun emacs-ai-agent-bridge-get-first-tmux-session ()
-  "Get the name of the first available tmux session.
-Sorts session names using natural sort order (0, 1, 2, ..., then alphabetically)."
-  (let ((output (shell-command-to-string "tmux list-sessions -F '#{session_name}' 2>/dev/null | sort -V | head -1")))
-    (if (string-empty-p output)
-        nil
-      (string-trim output))))
+(defun emacs-ai-agent-bridge-call-tmux (&rest args)
+  "Run tmux with ARGS synchronously, without going through a shell.
+Returns a cons cell (EXIT-CODE . STDOUT-STRING).  Stderr is discarded
+so tmux error text can never be mistaken for pane content.
+`default-directory' is bound to `temporary-file-directory' because the
+subprocess must not depend on the current buffer's directory, which may
+be remote (TRAMP), already deleted, or on a slow network mount; running
+the previous shell-based commands from such a directory could block the
+monitoring timer for minutes and freeze Emacs (Issue #29)."
+  (with-temp-buffer
+    (let ((default-directory temporary-file-directory))
+      (let ((status (apply #'call-process "tmux" nil '(t nil) nil args)))
+        (cons (if (numberp status) status 1) (buffer-string))))))
 
 (defun emacs-ai-agent-bridge-get-all-tmux-sessions ()
-  "Get a list of all available tmux sessions."
-  (let ((output (shell-command-to-string "tmux list-sessions -F '#{session_name}' 2>/dev/null")))
-    (if (string-empty-p output)
-        nil
-      (split-string output "\n" t))))
+  "Get a list of all available tmux sessions.
+Returns nil when the tmux server is not running."
+  (let ((result (emacs-ai-agent-bridge-call-tmux
+                 "list-sessions" "-F" "#{session_name}")))
+    (when (zerop (car result))
+      (split-string (cdr result) "\n" t))))
+
+(defun emacs-ai-agent-bridge-get-first-tmux-session ()
+  "Get the name of the first available tmux session.
+Session names are compared with `string-version-lessp' so numeric
+names sort naturally (0, 1, 2, ..., then alphabetically)."
+  (car (sort (emacs-ai-agent-bridge-get-all-tmux-sessions)
+             #'string-version-lessp)))
+
+(defun emacs-ai-agent-bridge-session-exists-p (session)
+  "Return non-nil if tmux SESSION currently exists.
+Uses an exact name match against the live session list, so numeric
+session names never suffer from tmux's prefix/index target ambiguity."
+  (and session
+       (member session (emacs-ai-agent-bridge-get-all-tmux-sessions))))
 
 (defun emacs-ai-agent-bridge-save-session ()
   "Save the current tmux session name to file for persistence across restarts."
@@ -169,21 +190,23 @@ Returns the session name if successfully restored, nil otherwise."
 (defun emacs-ai-agent-bridge-select-session ()
   "Select a tmux session from available sessions and switch to it."
   (interactive)
-  (let* ((sessions (emacs-ai-agent-bridge-get-all-tmux-sessions))
-         (current-session (or emacs-ai-agent-bridge-tmux-session
-                             (emacs-ai-agent-bridge-get-first-tmux-session)))
-         (selected (completing-read
-                    (format "Select tmux session (current: %s): " current-session)
-                    sessions
-                    nil t)))
-    (when selected
-      (setq emacs-ai-agent-bridge-tmux-session selected)
-      (emacs-ai-agent-bridge-save-session)
-      ;; モニタリング中であれば再起動
-      (when emacs-ai-agent-bridge--monitor-timer
-        (emacs-ai-agent-bridge-stop-monitoring)
-        (emacs-ai-agent-bridge-start-monitoring))
-      (message "Switched to tmux session: %s" selected))))
+  (let ((sessions (emacs-ai-agent-bridge-get-all-tmux-sessions)))
+    (unless sessions
+      (user-error "No tmux sessions found"))
+    (let* ((current-session (or emacs-ai-agent-bridge-tmux-session
+                                (emacs-ai-agent-bridge-get-first-tmux-session)))
+           (selected (completing-read
+                      (format "Select tmux session (current: %s): " current-session)
+                      sessions
+                      nil t)))
+      (when selected
+        (setq emacs-ai-agent-bridge-tmux-session selected)
+        (emacs-ai-agent-bridge-save-session)
+        ;; モニタリング中であれば再起動
+        (when emacs-ai-agent-bridge--monitor-timer
+          (emacs-ai-agent-bridge-stop-monitoring)
+          (emacs-ai-agent-bridge-start-monitoring))
+        (message "Switched to tmux session: %s" selected)))))
 
 (defun emacs-ai-agent-bridge-popup-select-session ()
   "Select a tmux session using popup menu and switch to it."
@@ -207,14 +230,16 @@ Returns the session name if successfully restored, nil otherwise."
 This is a helper function to avoid code duplication.
 The target includes the pane (SESSION:PANE) to match
 `emacs-ai-agent-bridge-capture-tmux-pane' and avoid ambiguous
-tmux target resolution when sessions are named with plain numbers."
+tmux target resolution when sessions are named with plain numbers.
+Signals a `user-error' when SESSION no longer exists, so callers
+fail fast with a clear message instead of sending text to a dead
+session (Issue #29)."
+  (unless (emacs-ai-agent-bridge-session-exists-p session)
+    (user-error "Tmux session %s not found (it may have been killed)" session))
   (let ((target (format "%s:%s" session emacs-ai-agent-bridge-tmux-pane))
         (lines (split-string text "\n" t)))
     (dolist (line lines)
-      (shell-command
-       (format "tmux send-keys -t %s %s"
-               (shell-quote-argument target)
-               (shell-quote-argument line)))
+      (emacs-ai-agent-bridge-call-tmux "send-keys" "-t" target "--" line)
       (sit-for 0.1))))
 
 (defun emacs-ai-agent-bridge-send-key-to-tmux (session key)
@@ -222,12 +247,12 @@ tmux target resolution when sessions are named with plain numbers."
 Common keys: C-m (Enter), Up, Down, etc.
 The target includes the pane (SESSION:PANE) to match
 `emacs-ai-agent-bridge-capture-tmux-pane' and avoid ambiguous
-tmux target resolution when sessions are named with plain numbers."
+tmux target resolution when sessions are named with plain numbers.
+Signals a `user-error' when SESSION no longer exists (Issue #29)."
+  (unless (emacs-ai-agent-bridge-session-exists-p session)
+    (user-error "Tmux session %s not found (it may have been killed)" session))
   (let ((target (format "%s:%s" session emacs-ai-agent-bridge-tmux-pane)))
-    (shell-command
-     (format "tmux send-keys -t %s %s"
-             (shell-quote-argument target)
-             key))))
+    (emacs-ai-agent-bridge-call-tmux "send-keys" "-t" target key)))
 
 (defun emacs-ai-agent-bridge-get-git-root ()
   "Get the git repository root directory.
@@ -467,21 +492,24 @@ Otherwise, do nothing."
      (t
       (message "No prompt detected in *ai* buffer")))))
 
-(defun emacs-ai-agent-bridge-capture-tmux-pane ()
+(defun emacs-ai-agent-bridge-capture-tmux-pane (&optional session)
   "Capture the current content of the configured tmux pane.
-Includes scrollback history based on `emacs-ai-agent-bridge-scrollback-lines'."
-  (let* ((session (or emacs-ai-agent-bridge-tmux-session
-                      (emacs-ai-agent-bridge-get-first-tmux-session)))
-         (scrollback-option (if (> emacs-ai-agent-bridge-scrollback-lines 0)
-                                (format " -S -%d" emacs-ai-agent-bridge-scrollback-lines)
-                              ""))
-         (cmd (format "tmux capture-pane -t %s:%s -p%s"
-                      session
-                      emacs-ai-agent-bridge-tmux-pane
-                      scrollback-option)))
-    (if session
-        (shell-command-to-string cmd)
-      (error "No tmux session available"))))
+Includes scrollback history based on `emacs-ai-agent-bridge-scrollback-lines'.
+SESSION defaults to the selected (or first available) session.
+Returns nil when the pane cannot be captured, e.g. when the session
+has just been killed; tmux error text is never returned as pane
+content (Issue #29)."
+  (let ((session (or session
+                     emacs-ai-agent-bridge-tmux-session
+                     (emacs-ai-agent-bridge-get-first-tmux-session))))
+    (when session
+      (let* ((target (format "%s:%s" session emacs-ai-agent-bridge-tmux-pane))
+             (args (append (list "capture-pane" "-t" target "-p")
+                           (when (> emacs-ai-agent-bridge-scrollback-lines 0)
+                             (list "-S" (format "-%d" emacs-ai-agent-bridge-scrollback-lines)))))
+             (result (apply #'emacs-ai-agent-bridge-call-tmux args)))
+        (when (zerop (car result))
+          (cdr result))))))
 
 (defun emacs-ai-agent-bridge-content-unchanged-p (content)
   "Check if CONTENT is unchanged from the last capture."
@@ -589,8 +617,13 @@ not reached a prompt; the whole content is dimmed with
                         80)) ; Default width if no window yet
          ;; Adjust box drawing lines first
          (adjusted-content (emacs-ai-agent-bridge-adjust-box-lines content window-width))
-         ;; Then trim trailing empty lines
-         (trimmed-content (replace-regexp-in-string "\\(\n\\s-*\\)+\\'" "" adjusted-content))
+         ;; Then trim trailing empty lines.  A plain character alternative is
+         ;; used instead of "\\(\n\\s-*\\)+\\'": \s- can match newline
+         ;; depending on the current buffer's syntax table, and the nested
+         ;; quantifier then explodes with catastrophic backtracking (2^N) on
+         ;; captures containing long runs of blank lines, freezing Emacs for
+         ;; minutes at 100% CPU.
+         (trimmed-content (replace-regexp-in-string "[ \t\r\n]+\\'" "" adjusted-content))
          ;; Finally colorize options if it's a choice prompt (skip while buffering)
          (final-content (if (and (not buffering)
                                  (emacs-ai-agent-bridge-is-choice-prompt-p trimmed-content))
@@ -628,43 +661,95 @@ not reached a prompt; the whole content is dimmed with
         (goto-char (point-max))
         (recenter -1)))))
 
+(defun emacs-ai-agent-bridge--resolve-live-session ()
+  "Return the name of a live tmux session to monitor, or nil.
+When the selected session has disappeared (e.g. killed with
+\"tmux kill-session\"), immediately fall back to the first available
+session so monitoring recovers without user intervention (Issue #29).
+When no session exists at all, return nil and wait quietly; a newly
+created session is adopted automatically on a later check."
+  (let ((sessions (emacs-ai-agent-bridge-get-all-tmux-sessions))
+        (selected emacs-ai-agent-bridge-tmux-session))
+    (if (and selected (member selected sessions))
+        selected
+      (let ((fallback (car (sort sessions #'string-version-lessp))))
+        (cond
+         ((and selected fallback)
+          (message "tmux session %s is gone; switched to session %s"
+                   selected fallback))
+         ((and selected (not fallback))
+          (message "tmux session %s is gone; waiting for a new session"
+                   selected))
+         ((and (not selected) fallback)
+          (message "Connected to tmux session %s" fallback)))
+        (setq emacs-ai-agent-bridge-tmux-session fallback)
+        ;; Restart prompt detection from scratch for the new session.
+        (setq emacs-ai-agent-bridge--last-capture nil
+              emacs-ai-agent-bridge--prompt-detected nil
+              emacs-ai-agent-bridge--change-start-time nil
+              emacs-ai-agent-bridge--spinner-active nil)
+        (force-mode-line-update t)
+        fallback))))
+
 (defun emacs-ai-agent-bridge-monitor-tmux ()
   "Check tmux console and update buffer if content is unchanged."
   (condition-case err
-      (let ((content (emacs-ai-agent-bridge-capture-tmux-pane)))
-        (cond
-         ;; Content unchanged and not yet detected - show buffer
-         ((and (emacs-ai-agent-bridge-content-unchanged-p content)
-               (not emacs-ai-agent-bridge--prompt-detected))
-          (emacs-ai-agent-bridge-update-ai-buffer content)
-          (setq emacs-ai-agent-bridge--prompt-detected t)
-          (setq emacs-ai-agent-bridge--spinner-active nil)
-          (setq emacs-ai-agent-bridge--change-start-time nil)
-          (force-mode-line-update t))
-         ;; Content changed - reset detection flag, advance spinner
-         ((not (emacs-ai-agent-bridge-content-unchanged-p content))
-          (setq emacs-ai-agent-bridge--prompt-detected nil)
-          (setq emacs-ai-agent-bridge--spinner-active t)
-          (setq emacs-ai-agent-bridge--spinner-index
-                (mod (1+ emacs-ai-agent-bridge--spinner-index)
-                     (length emacs-ai-agent-bridge--spinner-chars)))
-          ;; Track how long the content has been changing continuously
-          (unless emacs-ai-agent-bridge--change-start-time
-            (setq emacs-ai-agent-bridge--change-start-time (current-time)))
-          ;; If it has been changing for too long, reflect the current
-          ;; (still-changing) content into the *ai* buffer, dimmed, then
-          ;; restart the timer so it refreshes again after another interval.
-          (when (and (> emacs-ai-agent-bridge-buffering-refresh-interval 0)
-                     (>= (float-time
-                          (time-subtract (current-time)
-                                         emacs-ai-agent-bridge--change-start-time))
-                         emacs-ai-agent-bridge-buffering-refresh-interval))
-            (emacs-ai-agent-bridge-update-ai-buffer content t)
-            (setq emacs-ai-agent-bridge--change-start-time (current-time)))
-          (force-mode-line-update t)))
-        (setq emacs-ai-agent-bridge--last-capture content))
+      (let* ((session (emacs-ai-agent-bridge--resolve-live-session))
+             (content (and session
+                           (emacs-ai-agent-bridge-capture-tmux-pane session))))
+        (when content
+          (cond
+           ;; Content unchanged and not yet detected - show buffer
+           ((and (emacs-ai-agent-bridge-content-unchanged-p content)
+                 (not emacs-ai-agent-bridge--prompt-detected))
+            (emacs-ai-agent-bridge-update-ai-buffer content)
+            (setq emacs-ai-agent-bridge--prompt-detected t)
+            (setq emacs-ai-agent-bridge--spinner-active nil)
+            (setq emacs-ai-agent-bridge--change-start-time nil)
+            (force-mode-line-update t))
+           ;; Content changed - reset detection flag, advance spinner
+           ((not (emacs-ai-agent-bridge-content-unchanged-p content))
+            (setq emacs-ai-agent-bridge--prompt-detected nil)
+            (setq emacs-ai-agent-bridge--spinner-active t)
+            (setq emacs-ai-agent-bridge--spinner-index
+                  (mod (1+ emacs-ai-agent-bridge--spinner-index)
+                       (length emacs-ai-agent-bridge--spinner-chars)))
+            ;; Track how long the content has been changing continuously
+            (unless emacs-ai-agent-bridge--change-start-time
+              (setq emacs-ai-agent-bridge--change-start-time (current-time)))
+            ;; If it has been changing for too long, reflect the current
+            ;; (still-changing) content into the *ai* buffer, dimmed, then
+            ;; restart the timer so it refreshes again after another interval.
+            (when (and (> emacs-ai-agent-bridge-buffering-refresh-interval 0)
+                       (>= (float-time
+                            (time-subtract (current-time)
+                                           emacs-ai-agent-bridge--change-start-time))
+                           emacs-ai-agent-bridge-buffering-refresh-interval))
+              (emacs-ai-agent-bridge-update-ai-buffer content t)
+              (setq emacs-ai-agent-bridge--change-start-time (current-time)))
+            (force-mode-line-update t)))
+          (setq emacs-ai-agent-bridge--last-capture content)))
     (error
      (message "Error monitoring tmux: %s" (error-message-string err)))))
+
+(defun emacs-ai-agent-bridge--monitor-tick ()
+  "Run one monitoring check, then schedule the next one.
+A self-rescheduling one-shot timer is used instead of a repeating
+timer: when a single check ever takes longer than
+`emacs-ai-agent-bridge-monitor-interval' (e.g. tmux or the filesystem
+is temporarily slow), a repeating timer becomes permanently overdue
+and Emacs runs it back to back, starving user input so Emacs appears
+frozen (Issue #29).  With a one-shot timer the next check is only
+scheduled after the current one finishes, so Emacs always gets idle
+time between checks."
+  (unwind-protect
+      (emacs-ai-agent-bridge-monitor-tmux)
+    ;; Reschedule only while monitoring is still active
+    ;; (`emacs-ai-agent-bridge-stop-monitoring' clears the variable).
+    (when emacs-ai-agent-bridge--monitor-timer
+      (setq emacs-ai-agent-bridge--monitor-timer
+            (run-with-timer emacs-ai-agent-bridge-monitor-interval nil
+                            #'emacs-ai-agent-bridge--monitor-tick)))))
 
 (defun emacs-ai-agent-bridge-start-monitoring ()
   "Start monitoring the tmux console."
@@ -682,8 +767,7 @@ not reached a prompt; the whole content is dimmed with
         (setq emacs-ai-agent-bridge-tmux-session
               (emacs-ai-agent-bridge-get-first-tmux-session))))
   (setq emacs-ai-agent-bridge--monitor-timer
-        (run-with-timer 0 emacs-ai-agent-bridge-monitor-interval
-                        #'emacs-ai-agent-bridge-monitor-tmux))
+        (run-with-timer 0 nil #'emacs-ai-agent-bridge--monitor-tick))
   (message "Started monitoring tmux session %s, pane %s"
            emacs-ai-agent-bridge-tmux-session
            emacs-ai-agent-bridge-tmux-pane))

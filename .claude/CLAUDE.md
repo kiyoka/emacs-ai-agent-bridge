@@ -399,3 +399,102 @@ not see any progress in the `*ai*` buffer until the output stabilized.
 - ✓ File byte-compiles cleanly (only the unrelated `popup` dependency require)
 
 **Version**: bumped from 0.6.1 to 0.7.0
+
+## Issue #29 Fix
+
+### Problem
+After the monitored tmux session was killed (e.g. `tmux kill-session -t 0`),
+switching to a new session from Emacs could take an extremely long time — in some
+cases Emacs stayed unresponsive for 5 minutes or more, appearing frozen.
+
+### Root Causes
+Three structural problems combined to cause the freeze:
+
+1. **Repeating timer starvation**: monitoring used `(run-with-timer 0 2 ...)`.
+   If a single check ever took longer than the 2-second interval (slow tmux,
+   slow filesystem, WSL interop hiccup), the repeating timer became permanently
+   overdue, so Emacs ran checks back to back and user input was starved —
+   Emacs appeared completely frozen.
+2. **Shell commands inherited the current buffer's `default-directory`**:
+   every tmux invocation went through `shell-command`/`shell-command-to-string`,
+   which spawns a shell in the current buffer's directory. That directory can be
+   remote (TRAMP), already deleted, or on a slow network mount (e.g. OneDrive
+   via WSL's 9p `/mnt/c`); each spawn could then block for minutes, repeated
+   every 2 seconds by the monitor timer.
+3. **No dead-session detection**: `emacs-ai-agent-bridge-tmux-session` kept
+   pointing at the killed session, every capture failed, and tmux's stderr
+   error text ("can't find session") was even treated as pane content and
+   displayed in the `*ai*` buffer as if it were a prompt.
+
+### Fix
+1. **Self-rescheduling one-shot timer** — new `emacs-ai-agent-bridge--monitor-tick`
+   runs one check and only then schedules the next with a one-shot
+   `run-with-timer`, guaranteeing idle time between checks; a slow check can no
+   longer starve the event loop.  `emacs-ai-agent-bridge-stop-monitoring` still
+   simply cancels the timer and clears the variable, which also stops rescheduling.
+2. **Direct `call-process` tmux invocation** — new helper
+   `emacs-ai-agent-bridge-call-tmux` runs tmux without a shell, with
+   `default-directory` bound to `temporary-file-directory`, and returns
+   `(EXIT-CODE . STDOUT)`; stderr is discarded so error text can never be
+   mistaken for pane content.  All tmux calls (capture, send-keys,
+   list-sessions) now go through it.
+3. **Session liveness check and automatic failover** — new
+   `emacs-ai-agent-bridge-session-exists-p` (exact-name match against
+   `tmux list-sessions`) and `emacs-ai-agent-bridge--resolve-live-session`.
+   On every tick the monitor verifies the selected session still exists; if it
+   is gone it immediately switches to the first available session (message:
+   "tmux session X is gone; switched to session Y") and resets detection state.
+   If no session exists at all it waits quietly and adopts the first session
+   that appears.  Send helpers (`emacs-ai-agent-bridge-send-to-tmux`,
+   `emacs-ai-agent-bridge-send-key-to-tmux`) signal a `user-error` when the
+   target session is dead, so nothing is silently sent to the wrong place.
+4. **Misc hardening** — `emacs-ai-agent-bridge-capture-tmux-pane` returns nil
+   on failure instead of raising or returning error text;
+   `emacs-ai-agent-bridge-get-first-tmux-session` sorts in Lisp with
+   `string-version-lessp` instead of shelling out to `sort -V`;
+   `emacs-ai-agent-bridge-select-session` reports "No tmux sessions found"
+   instead of offering an empty completion list.
+
+### Verification
+- ✓ Batch-mode scenario test on an isolated tmux server (socket `-L eabtest`):
+  kill monitored session → next tick auto-switches to the surviving session in
+  0.007s; all-sessions-gone → ticks stay fast and quiet; new session appears →
+  adopted automatically; sends to a dead session raise `user-error`;
+  timer is one-shot and reschedules itself; stop-monitoring cancels cleanly
+  (23/23 checks passed)
+- ✓ File byte-compiles cleanly (only pre-existing warnings)
+
+**Version**: bumped from 0.7.0 to 0.7.1
+
+## Catastrophic Regex Backtracking Fix (v0.7.2)
+
+### Problem
+Emacs froze at 100% CPU for minutes (recoverable only with repeated C-g) whenever
+the `*ai*` buffer was updated with a capture containing a long run of blank lines
+(e.g. a mid-redraw Claude Code screen). Because the Issue #27 buffering refresh
+fires after 60 seconds of continuous change, the freeze typically hit shortly
+after starting Emacs while the AI agent was still producing output — which made
+it look like a "startup freeze that only happens when tmux is running".
+
+### Root Cause
+The trailing-blank-line trim in `emacs-ai-agent-bridge-update-ai-buffer` used
+`"\\(\n\\s-*\\)+\\'"`. In buffers whose syntax table gives newline whitespace
+syntax (fundamental-mode, text-mode, ... — the regexp runs in whatever buffer is
+current when the monitor timer fires), `\s-` also matches `\n`, so the nested
+quantifier can partition a run of N newlines in 2^(N-1) ways. When the run is
+followed by more text, `\'` fails and the engine explores all of them:
+25 blank lines ≈ 4 s, 38 blank lines ≈ 9 hours of CPU. Diagnosed by sending
+SIGUSR2 to the frozen Emacs (`debug-on-event`), which produced a Lisp backtrace
+pointing at this exact `replace-regexp-in-string` call.
+
+### Fix
+Replaced the pattern with a plain character alternative, which is linear-time
+and independent of the current syntax table:
+`(replace-regexp-in-string "[ \t\r\n]+\\'" "" adjusted-content)`
+
+### Verification
+- ✓ 38- and 60-newline runs trim in < 0.1 ms (previously hours)
+- ✓ Realistic mid-redraw capture content processes in < 0.1 ms with correct result
+- ✓ File byte-compiles cleanly (only pre-existing warnings)
+
+**Version**: bumped from 0.7.1 to 0.7.2

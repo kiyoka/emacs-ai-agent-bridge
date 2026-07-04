@@ -13,6 +13,7 @@ An Emacs extension that bridges an AI coding agent running in tmux with Emacs.
 - **Easy text sending**: Send selected region to AI agent with automatic execution
 - **Context awareness**: Automatically includes file path and line number with sent text
 - **Session persistence**: Selected tmux session is saved and restored across Emacs restarts
+- **Automatic session failover**: When the monitored tmux session is killed, monitoring switches to the first available session immediately (or quietly waits until a new session appears)
 
 ## Installation
 
