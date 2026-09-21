@@ -3,7 +3,7 @@
 ;; Copyright (C) 2025
 
 ;; Author:
-;; Version: 0.7.2
+;; Version: 0.7.3
 ;; Package-Requires: ((emacs "25.1") (popup "0.5.3"))
 ;; Keywords: tools, processes
 ;; URL: https://github.com/kiyoka/emacs-ai-agent-bridge
@@ -283,20 +283,24 @@ Returns git-relative path if in a git repository, buffer name if no file, or abs
     (buffer-name)))
 
 (defun emacs-ai-agent-bridge-send-region-to-tmux (start end)
-  "Send the region between START and END to the first available tmux session."
+  "Send the region between START and END to the first available tmux session.
+Only buffers backed by a real file get a \"This is from FILE at line N.\"
+annotation prepended; file-less buffers (e.g. *scratch*) have no meaningful
+file/line to reference, so the text is sent as-is."
   (interactive "r")
   (let* ((session (or emacs-ai-agent-bridge-tmux-session
                       (emacs-ai-agent-bridge-get-first-tmux-session)))
          (text (buffer-substring-no-properties start end))
-         ;; Get display path and line number
-         (display-path (emacs-ai-agent-bridge-get-display-path))
-         (line-number (line-number-at-pos start))
-         ;; Create annotation in English
-         (annotation (format "This is from %s at line %d.\n\n"
-                           display-path
-                           line-number))
-         ;; Prepend annotation to text
-         (annotated-text (concat annotation text)))
+         ;; Only annotate when the buffer is backed by a real file
+         (annotated-text
+          (if (buffer-file-name)
+              (let* ((display-path (emacs-ai-agent-bridge-get-display-path))
+                     (line-number (line-number-at-pos start))
+                     (annotation (format "This is from %s at line %d.\n\n"
+                                          display-path
+                                          line-number)))
+                (concat annotation text))
+            text)))
     (if session
         (progn
           ;; Send annotated text first, then send Enter key separately

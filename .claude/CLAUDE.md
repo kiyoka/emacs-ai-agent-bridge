@@ -498,3 +498,27 @@ and independent of the current syntax table:
 - ✓ File byte-compiles cleanly (only pre-existing warnings)
 
 **Version**: bumped from 0.7.1 to 0.7.2
+
+## Issue #31 Fix
+
+### Problem
+`send-to-ai` / `emacs-ai-agent-bridge-send-region-to-tmux` always prepended a
+`This is from <path> at line <N>.` annotation to the sent text, even when the
+source buffer was not backed by a real file (e.g. `*scratch*`). For such
+buffers, `emacs-ai-agent-bridge-get-display-path` falls back to returning the
+raw buffer name, so the annotation ended up referencing a meaningless
+"file"/"line" (e.g. `This is from *scratch* at line 67.`) that provides no
+useful context to the AI agent.
+
+### Fix
+Modified `emacs-ai-agent-bridge-send-region-to-tmux` (emacs-ai-agent-bridge.el:285)
+to only build and prepend the annotation when `(buffer-file-name)` is non-nil.
+File-less buffers now send the selected text as-is, with no annotation.
+
+**Verification**:
+- ✓ File-less (no `buffer-file-name`) buffer: sent text has no annotation prepended
+- ✓ File-backed buffer: `This is from <path> at line <N>.` annotation still prepended, unchanged
+- ✓ File parses cleanly (all forms read successfully; byte-compile blocked only by the
+  pre-existing unrelated `popup` dependency require)
+
+**Version**: bumped from 0.7.2 to 0.7.3
